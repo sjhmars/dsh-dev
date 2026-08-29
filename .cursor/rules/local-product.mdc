@@ -1,0 +1,31 @@
+---
+description: 本 fork 的产品目标与技术约束（从 AiAgent 对话迁来）
+alwaysApply: true
+---
+
+# 本地微信 Agent（dsh-dev）
+
+这是 DeepSeek Harness 的**自用 fork**，不是官方仓。详细背景见 `.cursor/memory.md`。
+
+## 产品
+
+- 本地自用、不商业化、无桌面界面；微信当嘴巴。
+- 入口：VPS 微信嘴巴（iLink）+ 本机收网关插件；方案见 `.cursor/plans/weixin-mouth-gateway.md`。官方 OpenClaw 微信插件只对照协议，不当生产引擎。
+- 主 Agent 当前台调度员；专用工种（先做炒股分析）按提示词自动派出。
+- 扩展方式：加工种包（`whenToUse` + 工具白名单 + 人设），尽量不改引擎。
+- 炒股工种只做分析、不下单。
+
+## 技术约束
+
+- 发动机就是本仓库。学习项目 `H:\pythonProject2\AiAgent` **不要再当生产引擎改**。
+- 工种约束学 Claude：命名 `type`、工具白名单双锁、`whenToUse`。对照仓 `H:\pythonProject2\claude-code-main` 只学约束，不拿泄露仓当主仓。
+- GPT 用 `@deepseek-ai/dsh-llm-pi-ai`，不要拿默认 `dsh-llm-deepseek` 硬喂 GPT。
+- Windows：用 pwsh 组合，不要官方 `minimal.py` 的持久 bash PTY。
+- 压缩用自带 `compaction-basic` + tool-result-pruner，不要搬 Claude 的 `compact.ts`。
+- 人设学 Claude 条目但自己措辞，不要整段粘贴泄露 prompt。
+
+## 仓库
+
+- 源仓（只读对照）：`H:\deepseek-harness`，官方 origin。
+- 本仓 origin：`https://github.com/sjhmars/dsh-dev.git`。未要求前不要 push。
+- 工作区可能仍有未解决 merge conflict，先别当干净主仓硬推。
