@@ -640,6 +640,28 @@
         "@deepseek-ai/.+"
       ]
     },
+    "apps/desktop": {
+      "entry": [
+        "tests/**/*.spec.ts",
+        "electron/main.ts",
+        "electron/preload.mts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "electron/**/*.ts",
+        "electron/**/*.mts",
+        "tests/**/*.ts"
+      ],
+      "ignoreDependencies": [
+        "@deepseek-ai/.+"
+      ]
+    },
+    "packages/bundle/desktop": {
+      "ignoreDependencies": [
+        "@deepseek-ai/.+",
+        "@sjhmars/plugin-install"
+      ]
+    },
     "packages/subagent/subagent-dsh-sdk": {
       "entry": [
         "tests/**/*.spec.ts",

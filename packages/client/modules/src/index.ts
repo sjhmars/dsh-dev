@@ -30,7 +30,7 @@ import { dirname, join } from 'node:path'
 import { Service } from '@deepseek-ai/cordis'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
-import type { IndexInjection } from '@deepseek-ai/dsh-host-webserver'
+import type { IndexInjection, WebServer } from '@deepseek-ai/dsh-host-webserver'
 import { optionalStringArray, stripClientSuffix } from './client/manifest.ts'
 import type { WebBootEntry, WebBootGraph } from './client/manifest.ts'
 
@@ -280,7 +280,13 @@ window.__ModuleLoader__={
  * boot activation audit reports it).
  */
 export class ClientModuleRegistry extends Service {
-  static inject = ['webServer', 'loader']
+  // webServer is optional: the desktop carrier boots the same tree without a
+  // web server and consumes the graph + bundles through the public faces
+  // below; the HTTP route and index tap register only when a webServer
+  // exists — immediately for one already present (the ordinary Web boot),
+  // otherwise through a guarded inject so a later-provided webServer still
+  // receives the same registrations.
+  static inject = ['loader']
 
   private readonly table = new Map<string, WebPluginRecord>()
   // Negative verdicts (unresolvable specifier — builtins like cordis:include,
@@ -336,15 +342,30 @@ export class ClientModuleRegistry extends Service {
       throw new ClientPackageCompositionError(failures)
     }
 
-    ctx.effect(
-      () => ctx.webServer.register({ kind: 'prefix', path: '/plugins', handler: this.serveBundle }),
-      'client-modules: bundle route',
-    )
+    // The /plugins route needs webServer, which is optional: the desktop
+    // carrier boots the same tree without one and consumes the graph and
+    // bundles through the public faces below. The route registers when a
+    // webServer exists — immediately for one already present (the ordinary
+    // Web boot), otherwise through a guarded inject so a later-provided
+    // webServer still receives the same registration.
+    const registerRoute = (webCtx: Context, webServer: WebServer): void => {
+      webCtx.effect(
+        () => webServer.register({ kind: 'prefix', path: '/plugins', handler: this.serveBundle }),
+        'client-modules: bundle route',
+      )
+    }
+    const immediate = ctx.get('webServer')
+    if (immediate === undefined) {
+      ctx.inject(['webServer'], (webCtx) => { registerRoute(webCtx, webCtx.webServer) })
+    } else {
+      registerRoute(ctx, immediate)
+    }
+    // Index injection rides the webserver's own event; without a webserver
+    // (desktop) there is no index to inject, so the listener is inert there.
     ctx.on('webserver/index-inject', (table) => {
       table.push(...bootInjections(this.composed))
     })
   }
-
   /**
    * Current composed entry graph (stable object between changes).
    * @returns the graph served as `window.__DSH_BOOT__`.
@@ -360,6 +381,26 @@ export class ClientModuleRegistry extends Service {
    */
   clientPath(id: string): string | undefined {
     return this.table.get(id)?.meta.clientPath
+  }
+
+  /**
+   * Read one entry's built client bundle text — the desktop carrier's face
+   * (the HTTP route reads the same paths for browsers).
+   * @param id - entry id (package name).
+   * @param sourceMap - read the `.map` sibling instead of the bundle.
+   * @returns the file text, or undefined for an unknown id or unbuilt bundle.
+   */
+  async bundleText(id: string, sourceMap = false): Promise<string | undefined> {
+    const clientPath = this.clientPath(id)
+    if (clientPath === undefined) return undefined
+    try {
+      return await readFile(`${clientPath}${sourceMap ? '.map' : ''}`, 'utf8')
+    } catch (error) {
+      // Registered but unreadable (bundle not built yet): undefined mirrors the
+      // HTTP route's 404 without inventing content.
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+      throw error
+    }
   }
 
   /**

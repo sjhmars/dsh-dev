@@ -1,0 +1,27 @@
+# Electron-builder configuration for the desktop client. The whole host
+# composition (web bundles + frontend dist) ships as production dependencies
+# in resources/app; agent-presets extraResources sit beside that tree (YAML).
+# Cordis loads each plugin as a separate ESM file. An asar archive makes
+# Electron copy those files to %TEMP%, after which Node cannot resolve
+# `@deepseek-ai/cordis`. Windows profile fallbacks are directory junctions
+# and cannot target asar paths.
+appId: ai.deepseek.harness.desktop
+productName: DeepSeek Harness Desktop
+asar: false
+directories:
+  output: release
+files:
+  - lib/**/*
+  - build/icon.png
+  - package.json
+extraResources:
+  - from: agent-presets
+    to: agent-presets
+win:
+  icon: build/icon.png
+  target:
+    - nsis
+    - portable
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

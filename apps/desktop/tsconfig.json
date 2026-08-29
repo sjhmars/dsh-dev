@@ -1,0 +1,49 @@
+{
+  // Host-face project for the desktop app: the Electron main process and
+  // the shared IPC channel vocabulary, checked under node types. Registered
+  // in tsconfig.host.json; the renderer is the shared web frontend, whose
+  // own face lives with packages/client.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "lib/types",
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "electron",
+    "src/shared",
+    "scripts",
+    "tests"
+  ],
+  "references": [
+    {
+      "path": "../../vendor/cordis"
+    },
+    {
+      "path": "../../vendor/include"
+    },
+    {
+      "path": "../../vendor/loader"
+    },
+    {
+      "path": "../../vendor/schemastery"
+    },
+    {
+      "path": "../../packages/boot/app-boot"
+    },
+    {
+      "path": "../../packages/client/modules"
+    },
+    {
+      "path": "../../packages/client/connection/tsconfig.host.json"
+    },
+    {
+      "path": "../../packages/host/apiproxy"
+    },
+    {
+      "path": "../../packages/bundle/desktop"
+    }
+  ]
+}

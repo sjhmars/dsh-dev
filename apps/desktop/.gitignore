@@ -1,0 +1,6 @@
+node_modules/
+dist/
+lib/
+.staging-runtime/
+resources/*.exe
+release/

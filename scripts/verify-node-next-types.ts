@@ -84,7 +84,10 @@ function linkPackage(pkg: WorkspacePackage, nodeModules: string): void {
   const parts = pkg.name.split('/')
   const link = resolve(nodeModules, ...parts)
   mkdirSync(dirname(link), { recursive: true })
-  symlinkSync(pkg.dir, link, 'dir')
+  // A directory symlink needs SeCreateSymbolicLinkPrivilege on Windows; a
+  // junction needs no privilege and resolves identically for path traversal,
+  // so the consumer typecheck runs on stock Windows shells too.
+  symlinkSync(pkg.dir, link, process.platform === 'win32' ? 'junction' : 'dir')
 }
 
 const packages = workspacePackages()
@@ -117,7 +120,8 @@ try {
   if (existsSync(rootTypes)) {
     const typesDir = resolve(nodeModules, '@types')
     mkdirSync(typesDir, { recursive: true })
-    symlinkSync(rootTypes, resolve(typesDir, 'node'), 'dir')
+    // Junction on Windows, like the package links (no symlink privilege needed).
+    symlinkSync(rootTypes, resolve(typesDir, 'node'), process.platform === 'win32' ? 'junction' : 'dir')
   }
 
   writeFileSync(resolve(tmp, 'package.json'), `${JSON.stringify({ type: 'module', private: true }, null, 2)}\n`)

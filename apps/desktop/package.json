@@ -1,0 +1,53 @@
+{
+  "name": "@deepseek-ai/dsh-desktop",
+  "description": "Local desktop client: the Electron main process boots the dsh web composition in-process (no HTTP listener), serves the shared frontend dist over a local app:// scheme, and bridges the Web GUI over IPC",
+  "version": "0.1.1-rc.1",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "directory": "apps/desktop"
+  },
+  "type": "module",
+  "main": "lib/electron/main.js",
+  "files": [
+    "lib"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "typecheck": "tsc -b tsconfig.json",
+    "build:main": "tsdown",
+    "build:web": "pnpm --filter @deepseek-ai/dsh-web-frontend run build",
+    "build": "pnpm run build:main && pnpm run build:web",
+    "dev": "pnpm run build && electron .",
+    "pack": "pnpm run build && node --import tsx/esm scripts/pack.ts",
+    "test": "vitest run tests"
+  },
+  "dependencies": {
+    "@deepseek-ai/cordis": "workspace:^",
+    "@deepseek-ai/dsh-agent-tool-presentation": "workspace:^",
+    "@deepseek-ai/dsh-app-boot": "workspace:^",
+    "@deepseek-ai/dsh-base": "workspace:^",
+    "@deepseek-ai/dsh-client-connection": "workspace:^",
+    "@deepseek-ai/dsh-client-modules": "workspace:^",
+    "@deepseek-ai/dsh-desktop-app": "workspace:^",
+    "@deepseek-ai/dsh-host-apiproxy": "workspace:^",
+    "@deepseek-ai/dsh-persona": "workspace:^",
+    "@deepseek-ai/dsh-terminal": "workspace:^",
+    "@deepseek-ai/dsh-terminal-bash": "workspace:^",
+    "@deepseek-ai/dsh-tool-ask-user": "workspace:^",
+    "@deepseek-ai/dsh-tool-bash-persistent": "workspace:^",
+    "@deepseek-ai/dsh-tool-cordis": "workspace:^",
+    "@deepseek-ai/dsh-tool-pwsh-persistent": "workspace:^",
+    "@deepseek-ai/dsh-web-app": "workspace:^",
+    "@deepseek-ai/dsh-web-frontend": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "electron": "^37.0.0",
+    "electron-builder": "^26.0.0",
+    "typescript": "^6.0.3"
+  }
+}

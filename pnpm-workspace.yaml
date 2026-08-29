@@ -42,6 +42,10 @@ allowBuilds:
   lefthook: true
   # Cross-platform boundary for the persistent PTY backend, including ConPTY on Windows.
   node-pty: true
+  # The desktop app's dev dependency downloads its prebuilt binary on install.
+  electron: true
+  # Transitive electron-builder tooling with a benign install script.
+  electron-winstaller: true
   # Pulled in by @earendil-works/pi-ai (optional LLM API backend). pnpm lists
   # them only because they ship lifecycle scripts, but those are no-ops we don't
   # need, so we deny them — install still succeeds.

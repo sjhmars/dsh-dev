@@ -142,6 +142,15 @@ describe('AppFrame', () => {
     expect(tracks(frame)).toEqual([280, 0])
   })
 
+  it('exposes stable column anchors for desktop title-row composition', () => {
+    const { frame } = mountFrame()
+    expect(frame.hasAttribute('data-shell-frame')).toBe(true)
+    expect(frame.querySelector('[data-shell-sidebar]')).not.toBeNull()
+    expect(frame.querySelector('[data-shell-center]')).not.toBeNull()
+    expect(frame.querySelector('[data-shell-details]')).not.toBeNull()
+    expect(frame.querySelector('[data-shell-title-drag]')).not.toBeNull()
+  })
+
   it('renders the session pair with empty owner shares (sessionId is framework-standard)', () => {
     const { slotCalls, getByTestId } = mountFrame()
     expect(getByTestId('center-content')).toBeTruthy()

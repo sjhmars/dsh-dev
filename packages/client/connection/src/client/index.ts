@@ -129,7 +129,9 @@ export function apply(ctx: Context): void {
   }
   const handle: ConnectionHandle = {
     api,
-    isLoopback: pageLocation === undefined || isLoopbackHostname(pageLocation.hostname),
+    // A custom transport shell owns the page end to end, so its caller is
+    // loopback-equivalent (same posture the browser 127/8 page gets).
+    isLoopback: transport !== undefined || pageLocation === undefined || isLoopbackHostname(pageLocation.hostname),
     hostDescription: {
       getSnapshot: () => description,
       subscribe: (listener) => {

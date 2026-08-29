@@ -42,6 +42,12 @@
   border-left: 1px solid var(--dsw-alias-border-l2);
 }
 
+/* Desktop chrome reveals this grid item through its injected stylesheet. It
+   stays absent from Web layout and accessibility trees. */
+.desktopTitleDrag {
+  display: none;
+}
+
 /* The details subtree stays mounted at zero width, so its border must not paint
    a 1px seam. The collapsed sidebar instead retains a bordered compact rail. */
 .frame[data-details-collapsed] .detailsCol {
