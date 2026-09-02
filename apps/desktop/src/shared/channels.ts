@@ -8,16 +8,18 @@
 export const DESKTOP_BRIDGE_CHANNELS = {
   /** Renderer → main: one fetch-shaped round trip. */
   request: 'desktop:request',
-  /** Renderer → main: open one mux/host event stream. */
-  eventsOpen: 'desktop:events:open',
-  /** Renderer → main: close one mux/host event stream. */
-  eventsClose: 'desktop:events:close',
   /** Main → renderer: one base64 response chunk ({streamId, chunk}). */
   chunk: 'desktop:chunk',
   /** Main → renderer: one response stream ended ({streamId}). */
   streamEnd: 'desktop:stream-end',
-  /** Main → renderer: one event frame ({kind, frame}). */
-  frame: 'desktop:frame',
-  /** Main → renderer: one event stream ended ({kind}). */
-  eventsEnd: 'desktop:events:end',
+  /** Renderer → main: open one Gateway stream pump ({id, endpoint, payload}). */
+  streamOpen: 'desktop:stream:open',
+  /** Renderer → main: abort one Gateway stream pump (id). */
+  streamClose: 'desktop:stream:close',
+  /** Main → renderer: one decoded Gateway stream item ({id, value}). */
+  item: 'desktop:stream:item',
+  /** Main → renderer: one Gateway stream ended ({id}). */
+  itemEnd: 'desktop:stream:end',
+  /** Main → renderer: one Gateway stream failed ({id, failure}). */
+  itemError: 'desktop:stream:error',
 } as const

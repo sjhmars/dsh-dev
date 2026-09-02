@@ -40,9 +40,6 @@
       "path": "../../packages/client/connection/tsconfig.host.json"
     },
     {
-      "path": "../../packages/host/apiproxy"
-    },
-    {
       "path": "../../packages/bundle/desktop"
     }
   ]

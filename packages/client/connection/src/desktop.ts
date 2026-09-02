@@ -1,22 +1,20 @@
 /**
- * Desktop IPC bridge (node half): the transport-agnostic gateway face
- * (`toFetchHandler(apiProxy)`) and the two server event streams, delivered to
- * one renderer over an injected sink. Electron-free by design — the desktop
- * app owns ipcMain/webContents wiring and injects the sink, so this module
+ * Desktop IPC bridge (node half): unary `/api` dispatch through the shared
+ * connection fetch handler and decoded Gateway streams, delivered to one
+ * renderer over an injected sink. Electron-free by design — the desktop app
+ * owns ipcMain/webContents wiring and injects the sink, so this module
  * typechecks and tests under plain Node.
  *
  * Trust model: the bridge exists only between the app's own main process and
  * its own window (contextBridge whitelist + local-only content). Reaching the
  * bridge therefore equals the browser carrier's loopback caller, so the
- * PRIVILEGED_METHODS Host fence has no desktop counterpart — documented in
- * apps/desktop/README.md as a security precondition.
+ * Host/Origin fence and browser authentication have no desktop counterpart —
+ * documented in apps/desktop/README.md as a security precondition.
  * @module @deepseek-ai/dsh-client-connection/desktop
  */
 
-import type { ApiProxy, HostFrame, MuxFrame, RpcRequest, ServerRequest } from '@deepseek-ai/dsh-host-apiproxy/api'
-import { RpcId } from '@deepseek-ai/dsh-host-apiproxy/api'
-import { toFetchHandler } from '@deepseek-ai/dsh-host-apiproxy'
-import { randomUUID } from 'node:crypto'
+import type { ConnectionFetchHandler, HostConnectionHandle } from './rpc.ts'
+import { API_PATH } from './api-path.ts'
 
 /** JSON-safe fetch request as it crosses the IPC wire. */
 export interface DesktopFetchRequest {
@@ -37,8 +35,24 @@ export interface DesktopFetchInit {
   body: string
 }
 
-/** One open event stream on the renderer side. */
-export type DesktopEventKind = 'mux' | 'host'
+/**
+ * Normalized Gateway stream failure, the same fields the WebSocket carrier's
+ * Client reports: `remote` failures come from the Host stream itself, `carrier`
+ * failures from the local transport.
+ */
+export type DesktopStreamFailure =
+  | { readonly kind: 'remote'; readonly code: string; readonly message: string; readonly details: object }
+  | { readonly kind: 'carrier'; readonly message: string }
+
+/**
+ * The Gateway stream faces the desktop carrier needs, structurally satisfied
+ * by `typertGateway.wireStream`. Kept structural so this module does not
+ * depend on the gateway package.
+ */
+export interface DesktopWireStream {
+  open(endpoint: string, payload: unknown, signal: AbortSignal): Promise<AsyncIterable<unknown>>
+  failure(error: unknown): { code: string; message: string; details: object }
+}
 
 /** Delivery sink the Electron wiring implements. */
 export interface DesktopBridgeSink {
@@ -46,10 +60,12 @@ export interface DesktopBridgeSink {
   sendChunk(streamId: string, chunk: string): void
   /** Close one response stream. */
   endStream(streamId: string): void
-  /** Deliver one mux/host event frame (the same ServerRequest shape as the WebSocket carrier). */
-  sendFrame(kind: DesktopEventKind, frame: ServerRequest): void
-  /** Close one event stream (iterator end on the renderer side). */
-  endEvents(kind: DesktopEventKind): void
+  /** Deliver one decoded Gateway stream item. */
+  sendItem(streamId: string, value: unknown): void
+  /** End one Gateway stream normally. */
+  endItemStream(streamId: string): void
+  /** Fail one Gateway stream with normalized failure fields. */
+  failItemStream(streamId: string, failure: DesktopStreamFailure): void
 }
 
 /** Narrow an unknown IPC value to the fetch-request wire shape. */
@@ -77,23 +93,24 @@ function decodeBody(body: string | undefined): Buffer | undefined {
 }
 
 /**
- * Owns the transport-independent gateway dispatch for one desktop renderer.
- * The app constructs it once after boot with `ctx.get('apiProxy')`, then
- * binds its methods to IPC handlers.
+ * Owns the transport-independent dispatch for one desktop renderer. The app
+ * constructs it once after boot with the connection service and the typert
+ * gateway's stream face, then binds its methods to IPC handlers.
  */
 export class DesktopBridge {
-  private readonly fetchHandler: ReturnType<typeof toFetchHandler>
+  private readonly fetchHandler: ConnectionFetchHandler
 
   constructor(
-    private readonly api: ApiProxy,
+    connection: HostConnectionHandle,
+    private readonly wireStream: DesktopWireStream,
     private readonly sink: DesktopBridgeSink,
   ) {
-    this.fetchHandler = toFetchHandler(api)
+    this.fetchHandler = connection.createSharedFetchHandler(API_PATH)
   }
 
   /**
    * Handle one renderer fetch: validate the wire shape, dispatch through the
-   * shared gateway face, and stream the response body back chunk by chunk.
+   * shared channel face, and stream the response body back chunk by chunk.
    * @param value - untrusted IPC input.
    * @returns the settlement; a malformed request yields a 400 response.
    */
@@ -112,7 +129,7 @@ export class DesktopBridge {
     if (response.body === null) {
       return { status: response.status, headers, body: '' }
     }
-    const streamId = randomUUID()
+    const streamId = randomId()
     void this.pump(streamId, response.body)
     return { status: response.status, headers, streamId, body: '' }
   }
@@ -132,37 +149,51 @@ export class DesktopBridge {
   }
 
   /**
-   * Open one mux/host event stream: frames flow in the same ServerRequest
-   * shape the WebSocket carrier uses, until the renderer closes (the wiring
-   * aborts the signal) or this bridge is disposed.
-   * @param kind - which server stream to pump.
+   * Pump one Gateway stream into the sink until the Host ends it, the renderer
+   * aborts, or this bridge is disposed. Open failures report as `carrier`
+   * failures; iteration failures normalize through the gateway's own failure
+   * face as `remote` failures.
+   * @param id - renderer-chosen stream id echoed on every sink delivery.
+   * @param endpoint - Gateway stream endpoint.
+   * @param payload - decoded endpoint payload.
    * @param signal - renderer-lifetime abort.
    * @returns a disposer stopping the pump.
    */
-  openEvents(kind: DesktopEventKind, signal: AbortSignal): () => void {
-    const source: AsyncIterable<RpcRequest<MuxFrame | HostFrame>> = kind === 'mux'
-      ? this.api.events.mux({ rpcId: RpcId(randomUUID()), payload: {} }, signal)
-      : this.api.events.host({ rpcId: RpcId(randomUUID()), payload: {} }, signal)
+  openStream(id: string, endpoint: string, payload: unknown, signal: AbortSignal): () => void {
     // Boxed so the closure-disposed flag stays a runtime fact, not a literal.
     const state = { closed: false }
     void (async () => {
+      let source: AsyncIterable<unknown>
       try {
-        for await (const frame of source) {
-          if (state.closed || signal.aborted) return
-          this.sink.sendFrame(kind, {
-            type: 'server-request',
-            rpcId: frame.rpcId,
-            method: frame.payload.type,
-            payload: frame.payload,
-          })
-        }
+        source = await this.wireStream.open(endpoint, payload, signal)
       } catch (error) {
-        // Stream source ended (or aborted): the renderer observes the close.
-        void error
-      } finally {
-        if (!state.closed) this.sink.endEvents(kind)
+        if (!state.closed && !signal.aborted) {
+          this.sink.failItemStream(id, { kind: 'carrier', message: failureMessage(error) })
+        }
+        return
+      }
+      try {
+        for await (const value of source) {
+          if (state.closed || signal.aborted) return
+          this.sink.sendItem(id, value)
+        }
+        if (!state.closed && !signal.aborted) this.sink.endItemStream(id)
+      } catch (error) {
+        if (!state.closed && !signal.aborted) {
+          this.sink.failItemStream(id, { kind: 'remote', ...this.wireStream.failure(error) })
+        }
       }
     })()
     return () => { state.closed = true }
   }
+}
+
+/** Render one thrown value as a carrier-failure message. */
+function failureMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+/** `crypto.randomUUID` is unavailable in the plain-Node test harness of older Nodes; keep one local id source. */
+function randomId(): string {
+  return `ds-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }

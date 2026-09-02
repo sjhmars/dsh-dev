@@ -1,0 +1,29 @@
+{
+  "name": "@deepseek-ai/dsh-external-gateway-deployment",
+  "description": "Deployment identity and loopback smoke contract for the dsh external-gateway profile",
+  "version": "0.1.2-alpha.1",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "directory": "apps/external-gateway"
+  },
+  "type": "module",
+  "exports": {
+    "./application.json": "./application.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "application.json"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "test": "cd ../.. && vitest run apps/external-gateway/tests"
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-app-boot": "workspace:^",
+    "vitest": "^4.1.8"
+  }
+}

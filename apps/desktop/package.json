@@ -23,17 +23,17 @@
     "build": "pnpm run build:main && pnpm run build:web",
     "dev": "pnpm run build && electron .",
     "pack": "pnpm run build && node --import tsx/esm scripts/pack.ts",
-    "test": "vitest run tests"
+    "test": "cd ../.. && vitest run apps/desktop/tests"
   },
   "dependencies": {
     "@deepseek-ai/cordis": "workspace:^",
     "@deepseek-ai/dsh-agent-tool-presentation": "workspace:^",
+    "@deepseek-ai/dsh-api-gateway": "workspace:^",
     "@deepseek-ai/dsh-app-boot": "workspace:^",
     "@deepseek-ai/dsh-base": "workspace:^",
     "@deepseek-ai/dsh-client-connection": "workspace:^",
     "@deepseek-ai/dsh-client-modules": "workspace:^",
     "@deepseek-ai/dsh-desktop-app": "workspace:^",
-    "@deepseek-ai/dsh-host-apiproxy": "workspace:^",
     "@deepseek-ai/dsh-persona": "workspace:^",
     "@deepseek-ai/dsh-terminal": "workspace:^",
     "@deepseek-ai/dsh-terminal-bash": "workspace:^",

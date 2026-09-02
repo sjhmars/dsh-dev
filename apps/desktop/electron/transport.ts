@@ -18,22 +18,19 @@ export interface DesktopFetchInit {
   body: string
 }
 
-/** One open server event stream. */
-export type DesktopEventKind = 'mux' | 'host'
-
-/** The server-request frame the renderer's carrier consumes. */
-export interface DesktopFrame {
-  type: 'server-request'
-  rpcId: string
-  method: string
-  payload: Record<string, unknown>
-}
+/** Normalized Gateway stream failure, as the connection node half reports it. */
+export type DesktopStreamFailure =
+  | { readonly kind: 'remote'; readonly code: string; readonly message: string; readonly details: object }
+  | { readonly kind: 'carrier'; readonly message: string }
 
 /** The bridge surface exposed as `window.desktopBridge`. */
 export interface DesktopBridgeTransport {
   request(input: { url: string; method: string; headers: Record<string, string>; body?: string }): Promise<DesktopFetchInit>
   onChunk(streamId: string, listener: (chunk: string) => void): () => void
   onStreamEnd(streamId: string, listener: () => void): () => void
-  openEvents(kind: DesktopEventKind, listener: (frame: DesktopFrame) => void): () => void
-  onEventsEnd(kind: DesktopEventKind, listener: () => void): () => void
+  openStream(id: string, endpoint: string, payload: unknown): void
+  closeStream(id: string): void
+  onStreamItem(streamId: string, listener: (value: unknown) => void): () => void
+  onItemEnd(streamId: string, listener: () => void): () => void
+  onStreamError(streamId: string, listener: (failure: DesktopStreamFailure) => void): () => void
 }

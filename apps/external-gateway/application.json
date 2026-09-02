@@ -1,0 +1,28 @@
+{
+  "name": "external-gateway",
+  "profile": "external-gateway",
+  "launcher": [
+    "dsh",
+    "--profile",
+    "external-gateway"
+  ],
+  "listener": {
+    "host": "127.0.0.1",
+    "port": 18765,
+    "protocol": "/v1"
+  },
+  "owns": [
+    "application-identity",
+    "deployment-usage",
+    "loopback-smoke"
+  ],
+  "delegates": {
+    "protocol-runtime": "@deepseek-ai/dsh-external-gateway",
+    "profile-patch": "@deepseek-ai/dsh-external-gateway-app"
+  },
+  "smoke": {
+    "health": "/healthz",
+    "browser-routes": "unreachable",
+    "network-bind": "loopback-only"
+  }
+}

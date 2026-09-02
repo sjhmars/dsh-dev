@@ -1,0 +1,72 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../../../vendor/cosmokit"
+    },
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../../host/webserver"
+    },
+    {
+      "path": "../../core/agent"
+    },
+    {
+      "path": "../../attachment/attachment"
+    },
+    {
+      "path": "../commands"
+    },
+    {
+      "path": "../../llm/llm"
+    },
+    {
+      "path": "../permission-presets"
+    },
+    {
+      "path": "../../api/session-controller/tsconfig.host.json"
+    },
+    {
+      "path": "../user-approval"
+    },
+    {
+      "path": "../user-questions"
+    },
+    {
+      "path": "../../subagent/subagent"
+    },
+    {
+      "path": "../../util/brand"
+    },
+    {
+      "path": "../../runtime-diagnostics/invariants"
+    },
+    {
+      "path": "../../storage/storage-domain"
+    },
+    {
+      "path": "../../core/session"
+    },
+    {
+      "path": "../../session-query/session-log-export/tsconfig.host.json"
+    },
+    {
+      "path": "../../util/atomic-write"
+    },
+    {
+      "path": "../../util/home-paths"
+    }
+  ]
+}

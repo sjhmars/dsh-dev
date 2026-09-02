@@ -10,16 +10,16 @@
 import { app, BrowserWindow, Menu, net, protocol, shell } from 'electron'
 import type { Context } from '@deepseek-ai/cordis'
 import { bootInjections } from '@deepseek-ai/dsh-client-modules'
-import { API_PATH, HostConnectionService } from '@deepseek-ai/dsh-client-connection'
-import { toFetchHandler } from '@deepseek-ai/dsh-host-apiproxy'
+import { API_PATH } from '@deepseek-ai/dsh-client-connection'
 import { renderIndexInjections } from '@deepseek-ai/dsh-host-webserver'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { bootDesktopHost, shippedPresetRoot } from './boot.ts'
+import { bootDesktopHost } from './boot.ts'
 import { wireDesktopBridge } from './bridge.ts'
 import { DESKTOP_TITLE_BAR } from './chrome.ts'
 import { resolveDistPath, resolvePluginBundle } from './protocol.ts'
+import { injectDesktopTransport } from './transport-install.ts'
 
 // Registered before ready: a standard, secure origin gives the renderer a
 // real storage origin (localStorage/sessionStorage) and a secure context. A
@@ -43,10 +43,11 @@ const INSTALL_ANCHOR = join(appDir, 'package.json')
  * @returns the settled root context.
  */
 async function bootHost(): Promise<Context> {
-  const presetRoot = app.isPackaged
-    ? join(process.resourcesPath, 'agent-presets')
-    : shippedPresetRoot(INSTALL_ANCHOR)
-  return bootDesktopHost(INSTALL_ANCHOR, { presetRoot })
+  // Packaged: the shipped roster ships as extraResources. Unpackaged: the
+  // agent-presets row resolves its own workspace presets directory.
+  return bootDesktopHost(INSTALL_ANCHOR, app.isPackaged
+    ? { presetRoot: join(process.resourcesPath, 'agent-presets') }
+    : {})
 }
 
 let quitting = false
@@ -139,22 +140,14 @@ void app.whenReady().then(async () => {
     const distRoot = dirname(distIndex)
     // Raw renderer fetches to /api (the logical RPC channel and any other
     // same-origin API call the web code issues through globalThis.fetch)
-    // arrive here: forward them through the connection node half's shared
-    // fetch handler, the same composition the Web host's /api route serves —
-    // the typert gateway's interceptor claims the generated Remote endpoints
-    // (commands/list etc.), and only the unclaimed rest falls through to the
-    // in-process apiProxy gateway. The HTTP trust fence does not apply (the
-    // desktop trust model: only this app's own window can reach this
-    // protocol).
+    // arrive here: forward them through the connection service's shared
+    // fetch handler, the same composition the Web host's /api route serves
+    // minus the HTTP trust fence — the desktop trust model means only this
+    // app's own window can reach this protocol.
     if (new URL(request.url).pathname.startsWith('/api')) {
-      const apiProxy = ctx.get('apiProxy')
-      if (apiProxy === undefined) return new Response('not found', { status: 404 })
-      const gateway = toFetchHandler(apiProxy)
-      const hostConnection = ctx.get('connection')
-      const handler = hostConnection instanceof HostConnectionService
-        ? hostConnection.createSharedFetchHandler(API_PATH, gateway)
-        : gateway
-      return handler.fetch(request)
+      const connection = ctx.get('connection')
+      if (connection === undefined) return new Response('not found', { status: 404 })
+      return connection.createSharedFetchHandler(API_PATH).fetch(request)
     }
     // Plugin bundles: the shell loads them via same-origin <script src> (a
     // script element never crosses the bridge), so this protocol serves them
@@ -175,10 +168,11 @@ void app.whenReady().then(async () => {
     if (resolution.kind === 'bad') return new Response('bad request', { status: 400 })
     if (resolution.kind === 'forbidden') return new Response('forbidden', { status: 403 })
     // Index (and every SPA fallback) injects the boot manifest rows the same
-    // way the Web host's webserver renders them.
+    // way the Web host's webserver renders them, with the transport installer
+    // first so the connection plugin finds its carrier before it boots.
     const injectIndex = async (): Promise<string> => {
       const html = await readFile(distIndex, 'utf8')
-      return renderIndexInjections(html, bootInjections(clientModules.graph()))
+      return injectDesktopTransport(renderIndexInjections(html, bootInjections(clientModules.graph())))
     }
     if (resolution.kind === 'index') {
       return new Response(await injectIndex(), {

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-28-desktop-pack-esm-peers-outside-asar.md
-2026-08-28-desktop-pack-esm-peers-outside-asar.md: ab3a0536e0dcd6c487ace170ecc0212f183debaf
-2026-08-28-desktop-pack-esm-peers-outside-asar.zh.md: b818563d21ea9e55ee4444d095fffaf12d561e92
+2026-08-28-desktop-pack-esm-peers-outside-asar.md: d6c93e760d93132422c4048524281affca6dd6eb
+2026-08-28-desktop-pack-esm-peers-outside-asar.zh.md: 6975c91d0713ffc3c29d276928b9a531cbd24622

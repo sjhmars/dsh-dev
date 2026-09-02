@@ -23,7 +23,7 @@ import {
   resolveProfileDir,
 } from '@deepseek-ai/dsh-app-boot'
 import { existsSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 
 const NAME = 'dsh-desktop'
 const PROFILE = 'desktop'
@@ -31,18 +31,10 @@ const PROFILE = 'desktop'
 const PROFILE_ROOT_CONFIG = '# dsh desktop profile root — an empty entry list; the tree is composed as patches.\n[]\n'
 
 /**
- * Shipped agent-preset root: the same directory the CLI deployment ships
- * (`apps/cli/config/agent-presets`). Unpackaged layout resolves it beside
- * this app (`../cli/config/agent-presets` from the install anchor). Packaged
- * Electron passes `process.resourcesPath/agent-presets` (extraResources).
- * @param installAnchor - the app's own package.json path.
- */
-export function shippedPresetRoot(installAnchor: string): string {
-  return join(dirname(installAnchor), '..', 'cli/config/agent-presets')
-}
-
-/**
- * Boot the desktop host composition in-process.
+ * Boot the desktop host composition in-process. Unpackaged runs keep the
+ * agent-presets row's own shipped root (`@deepseek-ai/dsh-agent-presets`
+ * resolves `../presets/` beside its lib), so only a packaged deployment
+ * passes `presetRoot` (the extraResources copy).
  * @param installAnchor - absolute path of the app's own package.json (the
  *   installation anchor bundle resolution and the module fallback heal from).
  * @param options - `presetRoot` overrides the shipped roster directory (packaged extraResources).
@@ -54,28 +46,39 @@ export async function bootDesktopHost(
 ): Promise<Context> {
   installFailLoud(NAME)
   loadEnv(NAME)
-  healProfilesModuleFallback(installAnchor)
   const profileDir = resolveProfileDir(PROFILE)
   if (!existsSync(join(profileDir, 'package.json'))) {
-    initProfile(profileDir, PROFILE_TEMPLATES[PROFILE] ?? ['@deepseek-ai/dsh-base'])
+    const template = PROFILE_TEMPLATES[PROFILE]
+    initProfile(profileDir, template?.bundles ?? ['@deepseek-ai/dsh-base'], template?.patchReload)
   }
   const profile = loadProfile(NAME, PROFILE, installAnchor, undefined, { userLayer: true })
   // Reuse the CLI's root-rewrite contract: the Loader's tree write-back can
   // bake composed rows into this file, and a fresh empty root re-anchors it.
   const rootConfig = join(profile.dir, 'cordis.yml')
   writeFileSync(rootConfig, PROFILE_ROOT_CONFIG)
+  // Heals the profile's module fallback from the bundles this profile
+  // selected — it needs the loaded profile, so it runs after loadProfile
+  // (the CLI's order).
+  healProfilesModuleFallback({ installAnchor, profile })
   const patches: PatchOptions[] = [
     ...profile.layers.flatMap(layer => layer.patches),
     ...profile.patches,
     ...loadOptionalPatches(NAME, join(profile.dir, '..', PROFILE_PATCH_FILENAME)) ?? [],
   ]
-  // The shipped preset root is the deployment's own assembly fact, the same
-  // overlay the CLI's composeProfile applies — the desktop app resolves the
-  // same directory the CLI ships.
+  // A packaged deployment repoints the agent-presets row at the
+  // extraResources copy; unpackaged runs keep the row's own shipped root, so
+  // no overlay exists and a renamed row fails loud the same way the CLI's
+  // does.
+  const presetRoot = options.presetRoot
+  if (presetRoot === undefined) {
+    return boot(NAME, rootConfig, structuredClone(patches))
+  }
   const rows = composeEntries([patches])
   const agentRow = rows.find(row => row.id === 'agent-presets')
-  const presetRoot = options.presetRoot ?? shippedPresetRoot(installAnchor)
-  const overlays: PatchOptions[] = agentRow === undefined ? [] : [{
+  if (agentRow === undefined) {
+    throw new Error('dsh-desktop: the composed tree has no agent-presets row to repoint at the packaged roster')
+  }
+  const overlays: PatchOptions[] = [{
     id: 'agent-presets',
     config: {
       ...agentRow.config as Record<string, unknown>,

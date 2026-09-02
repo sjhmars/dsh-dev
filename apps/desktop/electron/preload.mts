@@ -1,6 +1,6 @@
 /**
  * Desktop preload: exposes the typed `window.desktopBridge` transport the
- * DesktopApiClient consumes. Only these channels exist — no raw ipcRenderer
+ * injected shell glue consumes. Only these channels exist — no raw ipcRenderer
  * reaches the renderer, and every inbound payload is shape-checked before
  * delivery.
  * @module @deepseek-ai/dsh-desktop/preload
@@ -10,16 +10,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { IpcRendererEvent } from 'electron'
 import { DESKTOP_BRIDGE_CHANNELS as CH } from '../src/shared/channels.ts'
 import { desktopTitleBarStyle } from './chrome.ts'
-import type { DesktopBridgeTransport, DesktopEventKind, DesktopFetchInit, DesktopFrame } from './transport.ts'
-
-function isFrame(payload: unknown): payload is DesktopFrame {
-  if (typeof payload !== 'object' || payload === null) return false
-  const record = payload as Record<string, unknown>
-  return record['type'] === 'server-request'
-    && typeof record['rpcId'] === 'string'
-    && typeof record['method'] === 'string'
-    && typeof record['payload'] === 'object' && record['payload'] !== null
-}
+import type { DesktopBridgeTransport, DesktopFetchInit, DesktopStreamFailure } from './transport.ts'
 
 function isChunk(payload: unknown): { streamId: string; chunk: string } | undefined {
   if (typeof payload !== 'object' || payload === null) return undefined
@@ -35,19 +26,45 @@ function isStreamEnd(payload: unknown): string | undefined {
   return typeof record['streamId'] === 'string' ? record['streamId'] : undefined
 }
 
-function isKindFrame(payload: unknown): { kind: DesktopEventKind; frame: DesktopFrame } | undefined {
+function isItem(payload: unknown): { id: string; value: unknown } | undefined {
   if (typeof payload !== 'object' || payload === null) return undefined
   const record = payload as Record<string, unknown>
-  const kind = record['kind']
-  if (kind !== 'mux' && kind !== 'host') return undefined
-  if (!isFrame(record['frame'])) return undefined
-  return { kind, frame: record['frame'] }
+  return typeof record['id'] === 'string' && 'value' in record
+    ? { id: record['id'], value: record['value'] }
+    : undefined
 }
 
-function isEventsEnd(payload: unknown): DesktopEventKind | undefined {
+function isId(payload: unknown): string | undefined {
+  return typeof payload === 'string' ? payload : undefined
+}
+
+function isFailure(payload: unknown): { id: string; failure: DesktopStreamFailure } | undefined {
   if (typeof payload !== 'object' || payload === null) return undefined
   const record = payload as Record<string, unknown>
-  return record['kind'] === 'mux' || record['kind'] === 'host' ? record['kind'] : undefined
+  if (typeof record['id'] !== 'string') return undefined
+  const failure = record['failure']
+  if (typeof failure !== 'object' || failure === null) return undefined
+  const shape = failure as Record<string, unknown>
+  if (shape['kind'] === 'carrier') {
+    return typeof shape['message'] === 'string'
+      ? { id: record['id'], failure: { kind: 'carrier', message: shape['message'] } }
+      : undefined
+  }
+  if (shape['kind'] === 'remote') {
+    return typeof shape['code'] === 'string' && typeof shape['message'] === 'string'
+      && typeof shape['details'] === 'object' && shape['details'] !== null
+      ? {
+          id: record['id'],
+          failure: {
+            kind: 'remote',
+            code: shape['code'],
+            message: shape['message'],
+            details: shape['details'],
+          },
+        }
+      : undefined
+  }
+  return undefined
 }
 
 function subscribe<T>(channel: string, parse: (payload: unknown) => T | undefined, listener: (value: T) => void): () => void {
@@ -67,17 +84,22 @@ const bridge: DesktopBridgeTransport = {
   onStreamEnd: (streamId, listener) => subscribe(CH.streamEnd, isStreamEnd, (value) => {
     if (value === streamId) listener()
   }),
-  openEvents: (kind, listener) => {
-    // Subscribe before the pump starts: the main handler begins emitting
-    // frames as soon as the open request lands, and unregistered frames drop.
-    const off = subscribe(CH.frame, isKindFrame, (value) => {
-      if (value.kind === kind) listener(value.frame)
-    })
-    void ipcRenderer.invoke(CH.eventsOpen, kind)
-    return off
+  openStream: (id, endpoint, payload) => {
+    // Subscriptions live on the exposed object; the main pump starts as soon
+    // as this invoke lands and deliveries before registration would drop.
+    void ipcRenderer.invoke(CH.streamOpen, { id, endpoint, payload })
   },
-  onEventsEnd: (kind, listener) => subscribe(CH.eventsEnd, isEventsEnd, (value) => {
-    if (value === kind) listener()
+  closeStream: id => {
+    void ipcRenderer.invoke(CH.streamClose, id)
+  },
+  onStreamItem: (id, listener) => subscribe(CH.item, isItem, (value) => {
+    if (value.id === id) listener(value.value)
+  }),
+  onItemEnd: (id, listener) => subscribe(CH.itemEnd, isId, (value) => {
+    if (value === id) listener()
+  }),
+  onStreamError: (id, listener) => subscribe(CH.itemError, isFailure, (value) => {
+    if (value.id === id) listener(value.failure)
   }),
 }
 

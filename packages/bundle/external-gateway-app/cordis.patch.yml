@@ -1,0 +1,182 @@
+# The dsh-external-gateway-app patch turns the Web Host composition into a
+# headless, loopback-only external protocol server. It keeps the Web bundle's
+# Host controllers and agent-preset composition, but removes browser transport
+# and UI rows. The new WebServer is isolated so no root Web `/api` route can
+# become reachable through this application.
+
+# The Web bundle supplies Host controllers and the per-session preset roster.
+# These values remain useful to external-gateway and have no browser side
+# effect, so only transport-dependent rows are replaced below.
+
+# The Web transport carrier must not bind a root server. The gateway owns a
+# separate server in the isolated group at the end of this patch.
+- id: webserver
+  disabled: true
+
+- id: web-startup
+  disabled: true
+
+- id: web-runtime
+  disabled: true
+
+- id: client-hmr
+  disabled: true
+
+- id: modules
+  disabled: true
+
+- id: connection
+  disabled: true
+
+- id: api-remotes
+  disabled: true
+
+- id: cordis-client-runner
+  disabled: true
+
+# These Web rows inject the browser Connection or resolve a bind-dependent
+# directory picker. They are not part of the machine protocol.
+- id: session-log-download
+  disabled: true
+
+- id: directory-picker
+  disabled: true
+
+# Browser-only rows. Keeping the ids as explicit disabled entries prevents a
+# later Web patch reordering from silently restoring a UI contribution.
+- id: ui-theme
+  disabled: true
+
+- id: locale
+  disabled: true
+
+- id: ui-layout
+  disabled: true
+
+- id: ui-renderer
+  disabled: true
+
+- id: ui-session
+  disabled: true
+
+- id: ui-sidebar
+  disabled: true
+
+- id: ui-settings
+  disabled: true
+
+- id: ui-settings-general
+  disabled: true
+
+- id: ui-settings-models
+  disabled: true
+
+- id: ui-settings-plugin-inventory
+  disabled: true
+
+- id: ui-conversation
+  disabled: true
+
+- id: ui-approval
+  disabled: true
+
+- id: ui-chat
+  disabled: true
+
+- id: ui-brand-official
+  disabled: true
+
+- id: ui-attachment
+  disabled: true
+
+- id: ui-tool
+  disabled: true
+
+- id: ui-cordis
+  disabled: true
+
+- id: ui-workflow-run
+  disabled: true
+
+- id: ui-deliverables
+  disabled: true
+
+- id: ui-workspace
+  disabled: true
+
+- id: ui-input-trigger
+  disabled: true
+
+- id: ui-commands
+  disabled: true
+
+- id: ui-skill
+  disabled: true
+
+- id: ui-subagent
+  disabled: true
+
+- id: ui-reference
+  disabled: true
+
+- id: ui-jobs
+  disabled: true
+
+- id: ui-goal
+  disabled: true
+
+- id: ui-message-feedback
+  disabled: true
+
+- id: ui-model-selection
+  disabled: true
+
+- id: ui-permission
+  disabled: true
+
+- id: ui-agent-preset
+  disabled: true
+
+- id: ui-settings-plugins
+  disabled: true
+
+- id: ui-plan
+  disabled: true
+
+- id: ui-user-questions
+  disabled: true
+
+- id: ui-trajectory
+  disabled: true
+
+# Keep the shared JSON backend for existing domains and route only the
+# external-gateway domain to the SQLite backend mounted below.
+- id: storage-domain
+  config:
+    backend: json
+    routes:
+      external_gateway: sqlite
+
+- insert:
+    - id: storage-sqlite
+      name: '@deepseek-ai/dsh-storage-sqlite'
+      config:
+        path: !!js dshHomePath('storages', 'external-gateway.sqlite')
+
+    # The shared isolation label gives these two sibling entries one private
+    # WebServer realm while every other Host service remains inherited.
+    - id: external-gateway-webserver
+      name: '@deepseek-ai/dsh-host-webserver'
+      isolate:
+        webServer: external-gateway
+      config:
+        host: '127.0.0.1'
+        port: 18765
+        compression: gzip
+        compressionLevel: 1
+        compressionThresholdBytes: 1024
+
+    - id: external-gateway
+      name: '@deepseek-ai/dsh-external-gateway'
+      isolate:
+        webServer: external-gateway

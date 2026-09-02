@@ -80,7 +80,7 @@ export function electronBuilderArgs(staging: string, output: string, electronVer
  * @param staging - deploy target.
  * @returns absolute source/destination pairs.
  */
-export function extraStagingCopies(staging: string): Array<{ from: string, to: string }> {
+export function extraStagingCopies(staging: string): Array<{ from: string; to: string }> {
   return [
     { from: join(desktopDir, 'electron-builder.yml'), to: join(staging, 'electron-builder.yml') },
     { from: join(desktopDir, 'build/icon.png'), to: join(staging, 'build/icon.png') },
@@ -132,7 +132,7 @@ async function run(label: string, command: string, args: string[], cwd: string):
       stdio: 'inherit',
       shell: process.platform === 'win32',
     })
-    child.once('error', error => {
+    child.once('error', (error) => {
       reject(new Error(`dsh-desktop pack: ${label} failed to spawn: ${error.message} (${printable})`))
     })
     child.once('exit', (code, signal) => {
@@ -528,7 +528,7 @@ export async function packDesktop(): Promise<void> {
 const thisFile = fileURLToPath(import.meta.url)
 const invoked = process.argv[1] === undefined ? undefined : resolve(process.argv[1])
 if (invoked !== undefined && invoked.toLowerCase() === thisFile.toLowerCase()) {
-  packDesktop().catch(error => {
+  packDesktop().catch((error) => {
     console.error(error instanceof Error ? error.message : error)
     process.exit(1)
   })

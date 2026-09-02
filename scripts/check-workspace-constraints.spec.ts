@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import {
   checkExperimentalDependencyIsolation,
   checkExperimentalManifest,
+  expectedDshPackageFiles,
   type WorkspaceManifest,
 } from './check-workspace-constraints.ts'
 
@@ -71,6 +72,41 @@ describe('experimental workspace constraints', () => {
 
     expect(checkExperimentalDependencyIsolation(manifests)).toEqual([
       '@deepseek-ai/dsh-python-runtime: dependencies.@deepseek-ai/dsh-experimental-prototype must not reference an experimental package',
+    ])
+  })
+})
+
+describe('package payload constraints', () => {
+  it('includes a declared profile patch without a package-name allowlist', () => {
+    expect(expectedDshPackageFiles({
+      name: '@deepseek-ai/dsh-private-profile',
+      dsh: { bundle: { patch: './cordis.patch.yml' } },
+    })).toEqual([
+      'lib/index.js',
+      'lib/invariant.js',
+      'cordis.patch.yml',
+      'lib/types/**/*.d.ts',
+    ])
+  })
+
+  it('includes the External Gateway public entrypoints and references', () => {
+    expect(expectedDshPackageFiles({
+      name: '@deepseek-ai/dsh-external-gateway',
+      exports: {
+        './types': './lib/types/types.js',
+        './schema': './lib/types/schema.js',
+      },
+    })).toEqual([
+      'lib/index.js',
+      'lib/invariant.js',
+      'lib/storage.js',
+      'lib/token.js',
+      'PROTOCOL.md',
+      'PROTOCOL.zh.md',
+      'README.md',
+      'README.zh.md',
+      'lib/types/**/*.js',
+      'lib/types/**/*.d.ts',
     ])
   })
 })

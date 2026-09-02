@@ -20,13 +20,15 @@
 - id: web-startup
   disabled: true
 
-# The desktop carrier replaces the /api route and WebSocket downlinks the
-# connection node half binds, so the row mounts with no injects and an empty
-# trust list; it must stay ENABLED because its browser half is the boot-graph
-# row that provides ctx.connection in the renderer.
+# The desktop carrier consumes the connection service through the Electron
+# IPC bridge instead of the HTTP route (the node half registers no route
+# without a webserver), so the row overrides the web layer's [webRuntime]
+# ordering — that row is disabled here — and waits on credentials only. It
+# must stay ENABLED because its browser half is the boot-graph row that
+# provides ctx.connection in the renderer.
 - id: connection
   name: '@deepseek-ai/dsh-client-connection'
-  inject: []
+  inject: [credentials]
   config:
     trustedHosts: []
 

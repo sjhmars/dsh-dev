@@ -43,8 +43,8 @@ export function requiredDesktopPackPlugins(): Set<string> {
     ...namesFrom(join(repoRoot, 'packages/bundle/web-app/cordis.patch.yml')),
     ...namesFrom(join(repoRoot, 'packages/bundle/desktop/cordis.patch.yml')),
   ])
-  for (const preset of ['standard', 'code', 'minimal', 'cordis'] as const) {
-    for (const name of namesFrom(join(repoRoot, 'apps/cli/config/agent-presets', preset, 'agent.cordis.yml'))) {
+  for (const preset of ['standard', 'minimal', 'cordis', 'ptc'] as const) {
+    for (const name of namesFrom(join(repoRoot, 'packages/preset/agent-presets/presets', preset, 'agent.cordis.yml'))) {
       required.add(name)
     }
   }

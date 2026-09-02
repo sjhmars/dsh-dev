@@ -29,7 +29,8 @@ describe('desktop composition smoke (keyless)', () => {
     const runtime = context.get('desktopRuntime') as { distIndex?: string } | undefined
     expect(runtime?.distIndex).toMatch(/index\.html$/)
     expect(context.get('clientModules')).toBeDefined()
-    expect(context.get('apiProxy')).toBeDefined()
+    expect(context.get('connection')).toBeDefined()
+    expect(context.get('typertGateway')).toBeDefined()
     // The whole point of the desktop patch: no HTTP listener.
     expect(context.get('webServer')).toBeUndefined()
     // The connection row stays enabled so its browser half (ctx.connection in
