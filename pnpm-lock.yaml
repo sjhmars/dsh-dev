@@ -1385,8 +1385,8 @@ importers:
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
       '@sjhmars/plugin-install':
-        specifier: file:../../../../dsh-plugin/plugins/plugin-install
-        version: file:../dsh-plugin/plugins/plugin-install(a6de1d4791754f6b6fd09fb8dc1eaca9)
+        specifier: 0.3.1
+        version: 0.3.1(a6de1d4791754f6b6fd09fb8dc1eaca9)
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:^
@@ -13413,8 +13413,8 @@ packages:
     resolution: {integrity: sha512-tlqY9xq5ukxTUZBmoOp+m61cqwQD5pHJtFY3Mn8CA8ps6yghLH/Hw8UPdqg4OLmFW3IFlcXnQNmo/dh8HzXYIQ==}
     engines: {node: '>=18'}
 
-  '@sjhmars/plugin-install@file:../dsh-plugin/plugins/plugin-install':
-    resolution: {directory: ../dsh-plugin/plugins/plugin-install, type: directory}
+  '@sjhmars/plugin-install@0.3.1':
+    resolution: {integrity: sha512-v7YxcX5+FUDND7D26sGTB9wJTnzpKS+w7f0DeQSehVF8Gepql6QE4+STyByvPE2Ncjb+GoTY0xtJaaAIhBnAPg==}
     peerDependencies:
       '@deepseek-ai/cordis': '>=0.1.0-rc.5'
       '@deepseek-ai/dsh-app-boot': '>=0.1.2-alpha.1'
@@ -19966,7 +19966,7 @@ snapshots:
 
   '@sindresorhus/merge-streams@4.0.0': {}
 
-  '@sjhmars/plugin-install@file:../dsh-plugin/plugins/plugin-install(a6de1d4791754f6b6fd09fb8dc1eaca9)':
+  '@sjhmars/plugin-install@0.3.1(a6de1d4791754f6b6fd09fb8dc1eaca9)':
     dependencies:
       '@deepseek-ai/cordis': link:vendor/cordis
       '@deepseek-ai/dsh-app-boot': link:packages/boot/app-boot

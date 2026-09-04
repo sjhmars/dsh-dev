@@ -9,7 +9,7 @@ DeepSeek Harness 的本地桌面客户端：**Electron 主进程就是 dsh 宿�
 | 部件 | 职责 |
 |---|---|
 | `electron/main.ts` | boot 宿主树（三个 bundle 补丁层叠在 [`cordis.yml`](cordis.yml) 空根上，外加与 CLI 相同的 shipped agent-preset overlay）、经 `app://` 提供前端产物、创建窗口、负责退出收敛 |
-| `electron/boot.ts` | 无 Electron 依赖的宿主 boot：profile 机制加 shipped preset 根目录覆盖（检出为 `apps/cli/config/agent-presets`；打包后为 `resources/agent-presets`）。用户自己做的预设仍在 `$DSH_HOME/.agent-presets`。 |
+| `electron/boot.ts` | 无 Electron 依赖的宿主 boot：profile 机制加 shipped preset 根目录（检出为 `packages/preset/agent-presets/presets`；打包后为 `resources/agent-presets`）。用户自己做的预设仍在 `$DSH_HOME/.agent-presets`。 |
 | `electron/bridge.ts` | 把传输无关网关（`@deepseek-ai/dsh-client-connection/desktop` 的 `DesktopBridge`）绑到 `ipcMain` 与窗口 |
 | `electron/preload.mts` | 只暴露类型化的 `window.desktopBridge` 传输——渲染层拿不到裸 ipcRenderer |
 | `electron/protocol.ts` | 带穿越防护的产物路径映射（纯函数、可测） |
@@ -31,7 +31,7 @@ pnpm run desktop:dev      # build main + web dist, then launch Electron
 
 ## 打包
 
-`pnpm run desktop:pack` 先构建 Electron 主进程与 web 产物，再用 `pnpm deploy` 把生产闭包放到 workspace 之外的临时目录，然后对着该树执行 electron-builder（NSIS 安装包 + 便携版）。宿主组合作为生产依赖放在 `resources/app`（不用 asar：Cordis 把插件当 ESM 文件加载，Windows 上的 profile junction 也不能指向 asar 路径——[打包 peer](../../.agents/notes/implemented/bug-fix/2026-08-28-desktop-pack-esm-peers-outside-asar.zh.md)）。干净的 Windows 机器无需 Node、无需仓库检出。CLI 的 `agent-presets` 拷进 `extraResources`（只读系统名单）；用户自己做的预设仍在 `$DSH_HOME/.agent-presets`。Electron 运行时由 electron-builder 自行获取（缓存下载）。在 Windows 上，为 Electron 重编译 `node-pty` 需要 Visual Studio 单个组件 **MSVC v143 - VS 2022 C++ x64/x86 Spectre-mitigated libs**。这份一次性 deploy 让 electron-builder 的 pnpm collector 不必去跑会耗尽 Windows 文件句柄的 workspace `pnpm list`（[隔离](../../.agents/notes/implemented/process/2026-08-27-desktop-pack-isolated-pnpm-deploy.zh.md)）。
+`pnpm run desktop:pack` 先构建 Electron 主进程与 web 产物，再用 `pnpm deploy` 把生产闭包放到 workspace 之外的临时目录，然后对着该树执行 electron-builder（NSIS 安装包 + 便携版）。宿主组合作为生产依赖放在 `resources/app`（不用 asar：Cordis 把插件当 ESM 文件加载，Windows 上的 profile junction 也不能指向 asar 路径——[打包 peer](../../.agents/notes/implemented/bug-fix/2026-08-28-desktop-pack-esm-peers-outside-asar.zh.md)）。生产闭包包含 `dsh-desktop-app` 固定的已发布 `@sjhmars/plugin-install` 包；打包不要求相邻的插件仓库。干净的 Windows 机器无需 Node、无需仓库检出。agent-presets 包的 `presets` 目录作为只读系统名单拷进 `extraResources`；用户自己做的预设仍在 `$DSH_HOME/.agent-presets`。Electron 运行时由 electron-builder 自行获取（缓存下载）。在 Windows 上，为 Electron 重编译 `node-pty` 需要 Visual Studio 单个组件 **MSVC v143 - VS 2022 C++ x64/x86 Spectre-mitigated libs**。这份一次性 deploy 让 electron-builder 的 pnpm collector 不必去跑会耗尽 Windows 文件句柄的 workspace `pnpm list`（[隔离](../../.agents/notes/implemented/process/2026-08-27-desktop-pack-isolated-pnpm-deploy.zh.md)）。
 
 ## 安全姿态
 

@@ -10,9 +10,9 @@ A packed desktop asar does not include `apps/cli`, so the boot overlay that poin
 
 ## Decision
 
-Pack copies `apps/cli/config/agent-presets` into electron-builder `extraResources` (`agent-presets/`). Unpackaged boot keeps the CLI-neighbor path; packaged boot overlays `agent-presets.roots` to `join(process.resourcesPath, 'agent-presets')` with `trust: system`. `includeUserRoot` stays true, so `$DSH_HOME/.agent-presets` remains the user-authored roster. Shipped ids win on collision, matching `dsh web`.
+Pack copies `packages/preset/agent-presets/presets` into electron-builder `extraResources` (`agent-presets/`). Unpackaged boot keeps the agent-presets row's package-owned root; packaged boot overlays `agent-presets.roots` to `join(process.resourcesPath, 'agent-presets')` with `trust: system`. `includeUserRoot` stays true, so `$DSH_HOME/.agent-presets` remains the user-authored roster. Shipped ids win on collision, matching `dsh web`.
 
-`@sjhmars/plugin-install` is an out-of-tree package (Host Typert Remote + Settings tab, npm package name only, bundled `pnpm`). The untracked `dsh-desktop-app` patch inserts that row with `profile: desktop` and depends on the checkout via `file:`. Pack copies the built plugin (and its `pnpm` production dep) into the staging `node_modules` if deploy omitted it. The Settings tab and CLI match: desktop writes `desktop` (`dsh plugin --profile desktop add`); the browser still uses `dsh plugin --profile web add`. The two profiles do not share plugins.
+`@sjhmars/plugin-install` is an out-of-tree package (Host Typert Remote + Settings tab, npm package name only, bundled `pnpm`). The `dsh-desktop-app` patch inserts that row with `profile: desktop`, and its bundle pins the published package as a production dependency. Pack stages the installer and its `pnpm` dependency through the normal production closure; the [registry-dependency decision](../simplification/2026-09-04-desktop-installer-registry-dependency.md) owns its source and version policy. The Settings tab and CLI match: desktop writes `desktop` (`dsh plugin --profile desktop add`); the browser still uses `dsh plugin --profile web add`. The two profiles do not share plugins.
 
 ## Alternatives considered
 
@@ -22,4 +22,4 @@ Pack copies `apps/cli/config/agent-presets` into electron-builder `extraResource
 
 ## Consequences
 
-Packaged desktop can start a `standard` session without a prior `dsh web` home. The installer UI is always in the desktop composition; installing further plugins still requires restart. Packing requires a sibling `H:\dsh-plugin\plugins\plugin-install` checkout with `lib/` built.
+Packaged desktop can start a `standard` session without a prior `dsh web` home. The installer UI is always in the desktop composition; installing further plugins still requires restart. Packing resolves the pinned installer through the workspace dependency install and requires no adjacent plugin repository.

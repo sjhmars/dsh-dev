@@ -76,7 +76,7 @@ export function electronBuilderArgs(staging: string, output: string, electronVer
 /**
  * Files copied into the deploy tree after `pnpm deploy`. Deploy honors
  * package.json `files` (`lib/` only), so the builder config, Windows icon,
- * and CLI agent-presets directory are not in that payload.
+ * and the agent-presets package directory are not in that payload.
  * @param staging - deploy target.
  * @returns absolute source/destination pairs.
  */
@@ -84,16 +84,8 @@ export function extraStagingCopies(staging: string): Array<{ from: string; to: s
   return [
     { from: join(desktopDir, 'electron-builder.yml'), to: join(staging, 'electron-builder.yml') },
     { from: join(desktopDir, 'build/icon.png'), to: join(staging, 'build/icon.png') },
-    { from: join(repoRoot, 'apps/cli/config/agent-presets'), to: join(staging, 'agent-presets') },
+    { from: join(repoRoot, 'packages/preset/agent-presets/presets'), to: join(staging, 'agent-presets') },
   ]
-}
-
-/**
- * Out-of-workspace plugin the desktop bundle ships in-box.
- * @returns the plugin checkout directory next to this repository.
- */
-export function pluginInstallCheckout(): string {
-  return join(repoRoot, '..', 'dsh-plugin', 'plugins', 'plugin-install')
 }
 
 /**
@@ -227,6 +219,7 @@ function isPathInside(dir: string, root: string): boolean {
 }
 
 let workspacePackageDirs: Map<string, string> | undefined
+const installedPackageSourceDirs = new Map<string, string | undefined>()
 
 /**
  * Index vendored, packages-group, and native-launcher manifests so workspace
@@ -270,15 +263,37 @@ async function workspacePackageIndex(): Promise<Map<string, string>> {
   return map
 }
 
+/**
+ * Resolve a registry package through a workspace install link so pnpm's
+ * adjacent virtual-store dependencies remain available during staging.
+ * @param name - installed package name, including scope.
+ * @returns the real package directory, or undefined.
+ */
+async function installedPackageSourceDir(name: string): Promise<string | undefined> {
+  if (installedPackageSourceDirs.has(name)) return installedPackageSourceDirs.get(name)
+  const parts = name.split('/')
+  const searchRoots = [repoRoot, desktopDir, ...(await workspacePackageIndex()).values()]
+  for (const root of searchRoots) {
+    const candidate = join(root, 'node_modules', ...parts)
+    if (!existsSync(join(candidate, 'package.json'))) continue
+    const source = await realpath(candidate)
+    installedPackageSourceDirs.set(name, source)
+    return source
+  }
+  installedPackageSourceDirs.set(name, undefined)
+  return undefined
+}
+
 async function stageResolvedPackage(staging: string, name: string, sourceDir: string): Promise<void> {
   const dest = stagedPackageDir(staging, name)
   if (existsSync(join(dest, 'package.json'))) return
-  await copyPackageWithoutNestedModules(sourceDir, dest)
+  const source = await realpath(sourceDir)
+  await copyPackageWithoutNestedModules(source, dest)
   await materializeProductionDeps(
     staging,
     dest,
-    sourceDir,
-    isPathInside(sourceDir, repoRoot) ? repoRoot : staging,
+    source,
+    isPathInside(source, repoRoot) ? repoRoot : staging,
   )
 }
 
@@ -320,7 +335,8 @@ async function materializeProductionDeps(
       if (resolved === undefined) {
         if (skipIfUnresolved(field, pkg, name)) continue
         throw new Error(
-          `dsh-desktop pack: cannot resolve production dependency ${name} of ${pkg.name ?? dest}`,
+          `dsh-desktop pack: cannot resolve production dependency ${name} of ${pkg.name ?? dest}`
+          + ` from ${sourceDir} through ${stopAt}`,
         )
       }
       await stageResolvedPackage(staging, name, resolved)
@@ -370,8 +386,11 @@ export async function fillMissingProductionDeps(staging: string): Promise<number
     const dir = dirname(pkgPath)
     const pkg = JSON.parse(await readFile(pkgPath, 'utf8')) as { name?: string }
     const indexed = typeof pkg.name === 'string' ? (await workspacePackageIndex()).get(pkg.name) : undefined
-    const fromDir = indexed ?? dir
-    const stopAt = indexed === undefined ? staging : repoRoot
+    const installed = indexed === undefined && typeof pkg.name === 'string'
+      ? await installedPackageSourceDir(pkg.name)
+      : undefined
+    const fromDir = indexed ?? installed ?? dir
+    const stopAt = indexed === undefined && installed === undefined ? staging : repoRoot
     filled += await materializeProductionDeps(staging, dir, fromDir, stopAt)
   }
   return filled
@@ -507,11 +526,6 @@ export async function packDesktop(): Promise<void> {
     await materializeStagedLinks(staging)
     const rewritten = await rewriteWorkspaceProtocol(staging)
     console.log(`dsh-desktop pack: rewrote ${rewritten} workspace: dependency entries`)
-    const pluginSource = pluginInstallCheckout()
-    if (!existsSync(join(pluginSource, 'package.json'))) {
-      throw new Error(`dsh-desktop pack: missing in-box plugin at ${pluginSource}`)
-    }
-    await stageResolvedPackage(staging, '@sjhmars/plugin-install', pluginSource)
     const filled = await fillMissingProductionDeps(staging)
     console.log(`dsh-desktop pack: filled ${filled} missing production packages`)
     await run(

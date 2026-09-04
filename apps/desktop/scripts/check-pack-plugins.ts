@@ -5,8 +5,11 @@
  */
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
 import { repoRoot } from './pack.ts'
+
+const desktopBundleRequire = createRequire(join(repoRoot, 'packages/bundle/desktop/package.json'))
 
 /**
  * npm package name of a Cordis row specifier (`@scope/name/subpath` → `@scope/name`).
@@ -76,7 +79,7 @@ function addDir(index: Map<string, Manifest>, dir: string): void {
 }
 
 /**
- * Workspace + in-box plugin manifests pack can copy from.
+ * Workspace manifests plus installed packages that own in-box rows.
  * @returns package name to manifest.
  */
 function workspaceManifests(): Map<string, Manifest> {
@@ -93,7 +96,7 @@ function workspaceManifests(): Map<string, Manifest> {
     for (const name of entries) addDir(index, join(groupDir, name))
   }
   addDir(index, join(repoRoot, 'apps/desktop'))
-  addDir(index, join(repoRoot, '..', 'dsh-plugin', 'plugins', 'plugin-install'))
+  addDir(index, dirname(desktopBundleRequire.resolve('@sjhmars/plugin-install/package.json')))
   return index
 }
 
@@ -128,7 +131,7 @@ export function desktopProductionGraph(): Set<string> {
 export interface DesktopPackPluginGaps {
   /** Known workspace packages missing from the graph. */
   notInGraph: string[]
-  /** Names with no package.json in vendor/packages/desktop/plugin-install. */
+  /** Names with no indexed package.json. */
   unknown: string[]
 }
 

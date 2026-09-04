@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-28-desktop-presets-extraresources-plugin-install.md
-2026-08-28-desktop-presets-extraresources-plugin-install.md: 1e09742e5c5e9262a3d634a3851d7448efe85720
-2026-08-28-desktop-presets-extraresources-plugin-install.zh.md: 6463dddcb8fe90be3f97471e88101b0a74271712
+2026-08-28-desktop-presets-extraresources-plugin-install.md: e188b50f0247b30927830600dbafc20cfe2c90ce
+2026-08-28-desktop-presets-extraresources-plugin-install.zh.md: aca7341fa317c15ff0aab231bf70d8f3e164a014

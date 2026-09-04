@@ -43,7 +43,7 @@ Electron 应用通过 `desktop` profile 加载本 bundle。`desktop-startup` 行
 <details>
 <summary>实现内部细节——点击展开</summary>
 
-本 patch 叠加在 `dsh-web-app` 之上。它禁用 `webserver`、`web-runtime`、`web-startup`、`client-hmr` 与自适应目录选择器；无 HTTP bind 地重新挂载 `connection`；随后插入桌面 startup、runtime、原生目录选择器与插件安装行。Electron 应用拥有 `dsh-client-connection` 和 `apps/desktop` 中的 IPC 桥接线。
+本 patch 叠加在 `dsh-web-app` 之上。它禁用 `webserver`、`web-runtime`、`web-startup`、`client-hmr` 与自适应目录选择器；无 HTTP bind 地重新挂载 `connection`；随后插入桌面 startup、runtime、原生目录选择器与插件安装行。本 bundle 把已发布的 `@sjhmars/plugin-install` 固定为生产依赖，因此桌面 deploy 会包含安装器及其 `pnpm` 依赖，无需相邻的插件 checkout。Electron 应用拥有 `dsh-client-connection` 和 `apps/desktop` 中的 IPC 桥接线。
 
 ### 插件行
 

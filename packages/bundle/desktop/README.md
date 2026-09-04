@@ -43,7 +43,7 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The patch layers over `dsh-web-app`. It disables `webserver`, `web-runtime`, `web-startup`, `client-hmr`, and the adaptive directory picker; remounts `connection` without an HTTP bind; then inserts the desktop startup, runtime, native directory-picker, and plugin-install rows. The Electron application owns IPC bridge wiring in `dsh-client-connection` and `apps/desktop`.
+The patch layers over `dsh-web-app`. It disables `webserver`, `web-runtime`, `web-startup`, `client-hmr`, and the adaptive directory picker; remounts `connection` without an HTTP bind; then inserts the desktop startup, runtime, native directory-picker, and plugin-install rows. The bundle pins `@sjhmars/plugin-install` as a published production dependency, so the desktop deploy includes the installer and its `pnpm` dependency without an adjacent plugin checkout. The Electron application owns IPC bridge wiring in `dsh-client-connection` and `apps/desktop`.
 
 ### Plugin rows
 

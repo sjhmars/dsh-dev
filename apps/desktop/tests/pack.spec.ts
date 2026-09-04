@@ -10,7 +10,6 @@ import {
   ensureStagedPackage,
   extraStagingCopies,
   fillMissingProductionDeps,
-  pluginInstallCheckout,
   pnpmDeployArgs,
   repoRoot,
   rewriteWorkspaceProtocol,
@@ -51,16 +50,12 @@ describe('desktop pack staging', () => {
     expect(electronBuilderCli().replaceAll('\\', '/')).toMatch(/electron-builder\/cli\.js$/)
   })
 
-  it('resolves the sibling dsh-plugin installer checkout', () => {
-    expect(pluginInstallCheckout().replaceAll('\\', '/')).toMatch(/dsh-plugin\/plugins\/plugin-install$/)
-  })
-
-  it('copies the builder config, Windows icon, and CLI agent-presets that deploy omits', () => {
+  it('copies the builder config, Windows icon, and package-owned agent-presets that deploy omits', () => {
     const staging = join('C:\\', 'tmp', 'dsh-desktop-pack', 'app')
     expect(extraStagingCopies(staging)).toEqual([
       { from: join(desktopDir, 'electron-builder.yml'), to: join(staging, 'electron-builder.yml') },
       { from: join(desktopDir, 'build/icon.png'), to: join(staging, 'build/icon.png') },
-      { from: join(repoRoot, 'apps/cli/config/agent-presets'), to: join(staging, 'agent-presets') },
+      { from: join(repoRoot, 'packages/preset/agent-presets/presets'), to: join(staging, 'agent-presets') },
     ])
   })
 
@@ -129,6 +124,29 @@ describe('desktop pack staging', () => {
     writeFileSync(join(dest, 'package.json'), readFileSync(join(repoRoot, 'vendor/schemastery/package.json'), 'utf8'))
     await expect(fillMissingProductionDeps(staging)).resolves.toBeGreaterThan(0)
     expect(existsSync(join(staging, 'node_modules', '@standard-schema', 'spec', 'package.json'))).toBe(true)
+    rmSync(staging, { recursive: true, force: true })
+  })
+
+  it('fills production deps from an installed registry package', async () => {
+    const staging = mkdtempSync(join(tmpdir(), 'dsh-desktop-registry-dep-'))
+    const dest = join(staging, 'node_modules', 'node-addon-require-builtin')
+    mkdirSync(dest, { recursive: true })
+    writeFileSync(join(staging, 'package.json'), `${JSON.stringify({ name: DESKTOP_PACKAGE_NAME }, null, 2)}\n`)
+    writeFileSync(
+      join(dest, 'package.json'),
+      readFileSync(join(repoRoot, 'vendor/loader/node_modules/node-addon-require-builtin/package.json'), 'utf8'),
+    )
+    await expect(fillMissingProductionDeps(staging)).resolves.toBeGreaterThan(0)
+    expect(existsSync(join(staging, 'node_modules', 'node-addon-native-custom-loader', 'package.json'))).toBe(true)
+    rmSync(staging, { recursive: true, force: true })
+  })
+
+  it('resolves transitive production deps through pnpm junctions', async () => {
+    const staging = mkdtempSync(join(tmpdir(), 'dsh-desktop-junction-dep-'))
+    writeFileSync(join(staging, 'package.json'), `${JSON.stringify({ name: DESKTOP_PACKAGE_NAME }, null, 2)}\n`)
+    await ensureStagedPackage(staging, '@deepseek-ai/cordis-plugin-loader')
+    expect(existsSync(join(staging, 'node_modules', 'node-addon-require-builtin', 'package.json'))).toBe(true)
+    expect(existsSync(join(staging, 'node_modules', 'node-addon-native-custom-loader', 'package.json'))).toBe(true)
     rmSync(staging, { recursive: true, force: true })
   })
 

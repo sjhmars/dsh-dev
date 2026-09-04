@@ -47,7 +47,7 @@
     "@deepseek-ai/dsh-client-ui-directory-picker-native": "workspace:^",
     "@deepseek-ai/dsh-host-directory-picker": "workspace:^",
     "@deepseek-ai/dsh-web-frontend": "workspace:^",
-    "@sjhmars/plugin-install": "file:../../../../dsh-plugin/plugins/plugin-install",
+    "@sjhmars/plugin-install": "0.3.1",
     "@deepseek-ai/schemastery": "workspace:^"
   },
   "peerDependencies": {
