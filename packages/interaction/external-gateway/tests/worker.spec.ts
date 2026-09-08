@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
-import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
+import { MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
 import { GatewayClientId, GatewayDeliveryId } from '../src/brand.ts'
 import { externalGatewayDomainSpec, ExternalGatewayStore } from '../src/storage.ts'
 import { ExternalGatewayWorker } from '../src/worker.ts'
@@ -67,7 +67,7 @@ describe('ExternalGatewayWorker', () => {
         startupCwd: 'gateway-cwd',
         dispatch: async () => ({}),
         query: async () => ({ kind: 'json', value: {} }),
-        subscribe: next => { listener = next; return () => { listener = undefined } },
+        subscribe: (next) => { listener = next; return () => { listener = undefined } },
         replay: async () => { if (listener !== undefined) await listener(event) },
       }
     }
@@ -87,7 +87,7 @@ describe('ExternalGatewayWorker', () => {
 
   it('persists completion and mutation events before completing the inbox row', async () => {
     const harness = await openStore()
-    const dispatch = vi.fn(async request => ({
+    const dispatch = vi.fn<ExternalGatewayRuntime['dispatch']>(async request => ({
       sessionId: request.reservedSessionId ?? SessionId('runtime-session'),
       result: { accepted: true },
     }))
@@ -95,7 +95,9 @@ describe('ExternalGatewayWorker', () => {
     try {
       const accepted = await harness.store.acceptDelivery(client, createDelivery('create'))
       await worker.start()
-      await vi.waitFor(() => expect(harness.store.getDelivery(client, accepted.record.deliveryId)?.status).toBe('completed'))
+      await vi.waitFor(() => {
+        expect(harness.store.getDelivery(client, accepted.record.deliveryId)?.status).toBe('completed')
+      })
       expect(harness.store.listEvents(client, 0, 10).events.map(event => event.payload.type))
         .toEqual(['delivery-completed', 'session-created'])
       expect(dispatch).toHaveBeenCalledOnce()
@@ -108,12 +110,16 @@ describe('ExternalGatewayWorker', () => {
   it('keeps a delivery pending when shutdown aborts an in-flight dispatch', async () => {
     const harness = await openStore()
     const dispatch = vi.fn((_request, signal: AbortSignal) => new Promise<never>((_resolve, reject) => {
-      signal.addEventListener('abort', () => reject(new Error('dispatch aborted')), { once: true })
+      signal.addEventListener('abort', () => {
+        reject(new Error('dispatch aborted'))
+      }, { once: true })
     }))
     const worker = new ExternalGatewayWorker({ store: harness.store, runtime: runtime(dispatch), startupCwd: 'gateway-cwd' })
     const accepted = await harness.store.acceptDelivery(client, createDelivery('pending'))
     await worker.start()
-    await vi.waitFor(() => expect(dispatch).toHaveBeenCalledOnce())
+    await vi.waitFor(() => {
+      expect(dispatch).toHaveBeenCalledOnce()
+    })
     await worker.close()
     try {
       expect(harness.store.getDelivery(client, accepted.record.deliveryId)).toMatchObject({ status: 'pending', attempts: 1 })
@@ -129,7 +135,9 @@ describe('ExternalGatewayWorker', () => {
     try {
       const accepted = await harness.store.acceptDelivery(client, createDelivery('failed'))
       await worker.start()
-      await vi.waitFor(() => expect(harness.store.getDelivery(client, accepted.record.deliveryId)?.status).toBe('failed'))
+      await vi.waitFor(() => {
+        expect(harness.store.getDelivery(client, accepted.record.deliveryId)?.status).toBe('failed')
+      })
       expect(harness.store.listEvents(client, 0, 10).events.map(event => event.payload.type)).toEqual(['delivery-failed'])
     } finally {
       await worker.close()
@@ -139,7 +147,7 @@ describe('ExternalGatewayWorker', () => {
 
   it('resumes a pending delivery after acknowledgement frees outbox capacity', async () => {
     const harness = await openStore(2)
-    const dispatch = vi.fn(async request => ({
+    const dispatch = vi.fn<ExternalGatewayRuntime['dispatch']>(async request => ({
       sessionId: request.reservedSessionId ?? SessionId('runtime-session'),
       result: { accepted: true },
     }))
@@ -152,12 +160,18 @@ describe('ExternalGatewayWorker', () => {
       })
       const accepted = await harness.store.acceptDelivery(client, createDelivery('backpressure'))
       await worker.start()
-      await vi.waitFor(() => expect(dispatch).toHaveBeenCalledOnce())
-      await vi.waitFor(() => expect(harness.store.getDelivery(client, accepted.record.deliveryId)?.status).toBe('pending'))
+      await vi.waitFor(() => {
+        expect(dispatch).toHaveBeenCalledOnce()
+      })
+      await vi.waitFor(() => {
+        expect(harness.store.getDelivery(client, accepted.record.deliveryId)?.status).toBe('pending')
+      })
       expect(harness.store.listEvents(client, 0, 10).events).toHaveLength(2)
       await harness.store.acknowledge(client, 2)
       await worker.resumePending()
-      await vi.waitFor(() => expect(harness.store.getDelivery(client, accepted.record.deliveryId)?.status).toBe('completed'))
+      await vi.waitFor(() => {
+        expect(harness.store.getDelivery(client, accepted.record.deliveryId)?.status).toBe('completed')
+      })
       expect(dispatch).toHaveBeenCalledTimes(2)
     } finally {
       await worker.close()

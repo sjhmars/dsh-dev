@@ -35,8 +35,7 @@ describe('External Gateway wire schemas', () => {
         selection: { provider: 'deepseek', model: 'reasoner' },
       },
     })
-    expect(parsed.payload.type).toBe('model-select')
-    expect(parsed.payload.sessionId).toBe('session-1')
+    expect(parsed.payload).toMatchObject({ type: 'model-select', sessionId: 'session-1' })
   })
 
   it('accepts encoded images and rejects the removed attachment-reference format', () => {

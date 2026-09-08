@@ -6,6 +6,7 @@ import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import { afterEach, describe, expect, it } from 'vitest'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
 import { ExternalGatewayHttp, type ExternalGatewayHttpCarrier } from '../src/http.ts'
+import { MAX_GATEWAY_IMAGE_BYTES, MAX_GATEWAY_UPLOAD_BYTES } from '../src/schema.ts'
 import { externalGatewayDomainSpec, ExternalGatewayStore } from '../src/storage.ts'
 import { ExternalGatewayWorker } from '../src/worker.ts'
 import type { ExternalGatewayConfig, ExternalGatewayRuntime } from '../src/types.ts'
@@ -27,7 +28,10 @@ async function harness(): Promise<Harness> {
   const store = new ExternalGatewayStore({ domain, fixedCwd: 'gateway-cwd' })
   const runtime: ExternalGatewayRuntime = {
     startupCwd: 'gateway-cwd',
-    dispatch: async request => ({ sessionId: request.reservedSessionId, result: { accepted: true } }),
+    dispatch: async request => ({
+      ...(request.reservedSessionId === undefined ? {} : { sessionId: request.reservedSessionId }),
+      result: { accepted: true },
+    }),
     query: async () => ({ kind: 'json', value: {} }),
     subscribe: () => () => {},
     replay: async () => {},
@@ -35,7 +39,7 @@ async function harness(): Promise<Harness> {
   const worker = new ExternalGatewayWorker({ store, runtime, startupCwd: 'gateway-cwd' })
   const routes: Array<Parameters<ExternalGatewayHttpCarrier['register']>[0]> = []
   const carrier: ExternalGatewayHttpCarrier = {
-    register: route => {
+    register: (route) => {
       routes.push(route)
       return () => { routes.splice(routes.indexOf(route), 1) }
     },
@@ -53,6 +57,8 @@ async function harness(): Promise<Harness> {
     completedRetentionMs: 1_000,
     maxOutbox: 100,
     interactionTimeoutMs: 1_000,
+    maxUploadBytes: MAX_GATEWAY_UPLOAD_BYTES,
+    maxImageBytes: MAX_GATEWAY_IMAGE_BYTES,
   }
   const http = new ExternalGatewayHttp({ carrier, store, worker, runtime, token: TOKEN, config })
   const dispose = http.register()
@@ -66,7 +72,7 @@ async function harness(): Promise<Harness> {
       response.writeHead(404).end()
       return
     }
-    void Promise.resolve(route.handler(request, response)).catch(error => {
+    void Promise.resolve(route.handler(request, response)).catch((error: unknown) => {
       response.writeHead(500).end(String(error))
     })
   })

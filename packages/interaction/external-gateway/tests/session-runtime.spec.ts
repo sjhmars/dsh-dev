@@ -150,7 +150,7 @@ function harness(options: {
       return { sessionId: childSessionId }
     }),
     prompt: vi.fn(async () => ({ accepted: true as const })),
-    cancel: vi.fn(async () => ({ accepted: true as const })),
+    cancel: vi.fn(() => ({ accepted: true as const })),
     resolveAgent: vi.fn(async (sessionId: SessionId) => {
       const agent = agents.get(sessionId)
       return agent === undefined
@@ -172,7 +172,7 @@ function harness(options: {
     prompt: vi.fn(async (): Promise<SubagentPromptReceipt> => ({
       messageId: 'message-id' as SubagentPromptReceipt['messageId'],
     })),
-    interruptByParent: vi.fn(async () => ({ accepted: true as const })),
+    interruptByParent: vi.fn(() => ({ accepted: true as const })),
   }
   const ownership: GatewaySessionOwnership = {
     ownsSession: vi.fn(async (value: GatewayPeer, sessionId: SessionId) => owners.get(sessionId) === keyOf(value)),
@@ -208,7 +208,7 @@ function harness(options: {
     commands,
     permissionPresets: permission,
     skills,
-    subagents: subagents as GatewaySessionServices['subagents'],
+    subagents,
   }
   const runtime = new GatewaySessionRuntime({ services, ownership, fixedCwd })
   return {
