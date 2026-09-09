@@ -1,9 +1,9 @@
 /**
- * HTTP carrier for the versioned External Gateway protocol.
+ * 版本化 External Gateway 协议的 HTTP 传输层。
  *
- * This module only translates authenticated JSON requests into store and
- * Session-runtime calls. It does not expose the browser API or any Cordis
- * remote route.
+ * 本模块仅将已认证的 JSON 请求转换为存储和
+ * Session 运行时调用，不暴露浏览器 API 或任何 Cordis
+ * 远程路由。
  * @module @deepseek-ai/dsh-external-gateway/http
  */
 
@@ -35,29 +35,29 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import { ExternalGatewayStore, ExternalGatewayStoreError } from './storage.ts'
 import type { ExternalGatewayWorker } from './worker.ts'
 
-/** Minimal route carrier required by the HTTP adapter. */
+/** HTTP 适配器所需的最小路由接口。 */
 export interface ExternalGatewayHttpCarrier {
-  /** Register one route and return its disposer. */
+  /** 注册一条路由并返回释放函数。 */
   register(route: WebRoute): () => void
 }
 
-/** Dependencies for one HTTP protocol instance. */
+/** 单个 HTTP 协议实例的依赖项。 */
 export interface ExternalGatewayHttpOptions {
-  /** Route carrier, normally `ctx.webServer`. */
+  /** 路由承载服务，通常为 `ctx.webServer`。 */
   readonly carrier: ExternalGatewayHttpCarrier
-  /** Durable inbox/outbox and ownership store. */
+  /** 持久化 inbox、outbox 和归属存储。 */
   readonly store: ExternalGatewayStore
-  /** Worker receiving newly admitted deliveries. */
+  /** 接收新准入投递的 worker。 */
   readonly worker: ExternalGatewayWorker
-  /** Existing Session facade adapter. */
+  /** 现有 Session 封装层适配器。 */
   readonly runtime: ExternalGatewayRuntime
-  /** Loaded bearer token. */
+  /** 已加载的 Bearer Token。 */
   readonly token: string
-  /** Validated HTTP and protocol limits. */
+  /** 已校验的 HTTP 和协议限制。 */
   readonly config: ExternalGatewayConfig
 }
 
-/** Structured error envelope returned by protected routes. */
+/** 受保护路由返回的结构化错误封装。 */
 export interface GatewayHttpError {
   readonly error: string
   readonly message: string
@@ -166,17 +166,17 @@ async function readRawBody(req: IncomingMessage, maxBytes: number): Promise<Buff
   return Buffer.concat(chunks)
 }
 
-/** HTTP parsing failure with a stable status/error code. */
+/** 包含稳定状态码和错误码的 HTTP 解析错误。 */
 export class HttpInputError extends Error {
-  /** HTTP status. */
+  /** HTTP 状态码。 */
   readonly status: number
-  /** Protocol error code. */
+  /** 协议错误码。 */
   readonly errorCode: string
 
   /**
-   * @param status - HTTP response status.
-   * @param errorCode - Stable error code.
-   * @param message - Safe diagnostic.
+   * @param status - HTTP 响应状态码。
+   * @param errorCode - 稳定错误码。
+   * @param message - 安全的诊断信息。
    */
   constructor(status: number, errorCode: string, message: string) {
     super(message)
@@ -317,7 +317,7 @@ function errorStatus(error: unknown): { readonly status: number; readonly code: 
 }
 
 /**
- * Register and serve all `/v1` routes for one authenticated client.
+ * 为一个已认证客户端注册并提供全部 `/v1` 路由。
  */
 export class ExternalGatewayHttp {
   private readonly carrier: ExternalGatewayHttpCarrier
@@ -329,7 +329,7 @@ export class ExternalGatewayHttp {
   private readonly disposers: (() => void)[] = []
 
   /**
-   * @param options - Carrier, durable store, worker, runtime, token and policy.
+   * @param options - 传输服务、持久化存储、worker、运行时、token 和策略。
    */
   constructor(options: ExternalGatewayHttpOptions) {
     this.carrier = options.carrier
@@ -340,7 +340,7 @@ export class ExternalGatewayHttp {
     this.config = options.config
   }
 
-  /** Install all route registrations and return a disposer. */
+  /** 安装全部路由注册并返回释放函数。 */
   register(): () => void {
     this.disposers.push(this.carrier.register({ kind: 'exact', path: '/healthz', handler: (req, res) => {
       if (!method(req, res, 'GET')) return

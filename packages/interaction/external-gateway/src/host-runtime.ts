@@ -1,4 +1,4 @@
-/** Host-service adapter for the External Gateway protocol. */
+/** External Gateway 协议的宿主服务适配器。 */
 
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
@@ -30,9 +30,9 @@ import { ExternalGatewayStore, ExternalGatewayStoreError } from './storage.ts'
 import { GatewayClientId, GatewayInteractionId } from './brand.ts'
 import { GatewaySessionRuntime, GatewaySessionRuntimeError, type GatewayPeer } from './session-runtime.ts'
 
-/** Stable Host-adapter failure consumed by the delivery worker. */
+/** 投递 worker 使用的稳定宿主适配错误。 */
 export class ExternalGatewayHostRuntimeError extends Error {
-  /** @param code - protocol-facing failure code. @param message - safe diagnostic. */
+  /** @param code - 面向协议的错误码。 @param message - 安全的诊断信息。 */
   constructor(readonly code: string, message: string) {
     super(message)
     this.name = 'ExternalGatewayHostRuntimeError'
@@ -176,7 +176,7 @@ function finalAssistantText(session: Session, turn: number): string | undefined 
   return text.length === 0 ? undefined : text
 }
 
-/** Real adapter over the Host services already mounted by `dsh-web-app`. */
+/** 对接 `dsh-web-app` 已挂载宿主服务的实际适配器。 */
 export class ExternalGatewayHostRuntime implements ExternalGatewayRuntime {
   readonly startupCwd: string
   private readonly sessions: GatewaySessionRuntime
@@ -194,7 +194,7 @@ export class ExternalGatewayHostRuntime implements ExternalGatewayRuntime {
   }>()
   private readonly interactionTimeoutMs: number
 
-  /** @param ctx - assembled Host services. @param store - peer ownership store. @param startupCwd - fixed Session cwd. */
+  /** @param ctx - 已组装的宿主服务。 @param store - peer 归属存储。 @param startupCwd - Session 固定 cwd。 */
   constructor(
     private readonly ctx: Context,
     private readonly store: ExternalGatewayStore,
@@ -222,7 +222,15 @@ export class ExternalGatewayHostRuntime implements ExternalGatewayRuntime {
     ctx.on('approval/request', (request, next) => this.answerApproval(request, next), { global: true })
   }
 
-  /** Execute one peer-scoped durable mutation through existing Host services. */
+  /** 读取宿主 Session 前，仅创建当前 peer 处于 pending 状态的预留 Session。 */
+  private async createPendingSession(peer: GatewayPeer, sessionId: SessionId): Promise<void> {
+    const owned = this.store.listSessions(peer).find(record => record.sessionId === sessionId)
+    if (owned?.status !== 'pending') return
+    await this.sessions.create(peer, { sessionId })
+    await this.store.markSessionReady(peer, sessionId)
+  }
+
+  /** 通过现有宿主服务执行一次 peer 范围内的持久化变更。 */
   async dispatch(
     request: ExternalGatewayDispatchRequest,
     signal: AbortSignal,
@@ -273,6 +281,7 @@ export class ExternalGatewayHostRuntime implements ExternalGatewayRuntime {
         if (sessionId === undefined) {
           throw new ExternalGatewayHostRuntimeError('missing-reservation', 'message has no durable Session reservation')
         }
+        await this.createPendingSession(peer, sessionId)
         const result = await this.sessions.message(peer, {
           sessionId,
           requestId: requestId(request.deliveryId),
@@ -283,6 +292,7 @@ export class ExternalGatewayHostRuntime implements ExternalGatewayRuntime {
       }
       case 'command': {
         const sessionId = payload.sessionId ?? request.reservedSessionId
+        if (sessionId !== undefined) await this.createPendingSession(peer, sessionId)
         const result = await this.sessions.command(peer, {
           ...(sessionId === undefined ? {} : { sessionId }),
           line: payload.command,
@@ -338,7 +348,7 @@ export class ExternalGatewayHostRuntime implements ExternalGatewayRuntime {
     }
   }
 
-  /** Read one peer-owned Host projection. */
+  /** 读取当前 peer 拥有的宿主投影。 */
   async query(request: ExternalGatewayQueryRequest, signal: AbortSignal): Promise<ExternalGatewayQueryResult> {
     const peer = this.peer(request)
     if (request.operation === 'sessions') {
@@ -350,8 +360,8 @@ export class ExternalGatewayHostRuntime implements ExternalGatewayRuntime {
             observation: await this.ctx.sessionController.inspect(owned.sessionId, signal),
           }
         } catch {
-          // A failed create reservation remains observable to its owner but
-          // must not make every list request fail.
+          // 创建失败的预留记录仍对其所有者可见，但
+          // 不能导致所有列表请求失败。
           return { ownership: owned, observation: null }
         }
       }))
@@ -396,13 +406,13 @@ export class ExternalGatewayHostRuntime implements ExternalGatewayRuntime {
     }
   }
 
-  /** Subscribe to events projected by the Host integration. */
+  /** 订阅宿主集成投影出的事件。 */
   subscribe(listener: (event: ExternalGatewayRuntimeEvent) => Promise<void>): () => void {
     this.listeners.add(listener)
     return () => { this.listeners.delete(listener) }
   }
 
-  /** Replay Session-log events not yet copied into the durable gateway outbox. */
+  /** 重放尚未复制到网关持久化 outbox 的 Session 日志事件。 */
   async replay(): Promise<void> {
     for (const owned of this.store.listAllSessions()) {
       if (owned.status !== 'ready') continue
@@ -424,7 +434,7 @@ export class ExternalGatewayHostRuntime implements ExternalGatewayRuntime {
     }
   }
 
-  /** Publish one allowlisted Host event to worker subscribers. */
+  /** 向 worker 订阅方发布一个允许列表中的宿主事件。 */
   private async publish(event: ExternalGatewayRuntimeEvent): Promise<void> {
     await Promise.all([...this.listeners].map(listener => listener(event)))
   }
@@ -649,7 +659,7 @@ export class ExternalGatewayHostRuntime implements ExternalGatewayRuntime {
   }
 }
 
-/** Normalize facade failures for HTTP and worker adapters. */
+/** 为 HTTP 和 worker 适配器统一封装层错误。 */
 export function isGatewayOwnershipFailure(error: unknown): boolean {
   return error instanceof GatewaySessionRuntimeError && error.code === 'session-not-owned'
 }

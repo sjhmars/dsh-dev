@@ -78,7 +78,7 @@ HTTP carrier 只需要隔离 Host WebServer realm 提供的 `register(route)` �
 
 Worker 按一个 client/account/peer conversation 串行处理 delivery，不同 conversation 可以并行。若 runtime 已接受 mutation 但进程在完成 inbox row 前崩溃，mutation 可能再次执行；这是有意采用的至少一次语义。Worker 在改变 inbox 状态前先写入完成或失败事件，因此已完成 delivery 不会隐藏其唯一结果。
 
-Session 创建会在 runtime 创建 Session 之前把显式 Session id 保存在 inbox。部分写入或进程重启后的重试会复用同一 id，而不是生成无关的第二个 Session。
+Session 创建会在 runtime 创建 Session 之前把显式 Session id 保存在 inbox。消息和命令指向 pending reservation 时，会先创建或恢复 Host Session，再读取或使用它。部分写入或进程重启后的重试会复用同一 id，而不是生成无关的第二个 Session。
 
 Allowlist 中的 Session event 会使用持久的逐 Session cursor 复制到 outbox。启动时会重放 cursor 之后的 event，因此 Session log commit 与 outbox write 之间发生崩溃时可能重复 projection，但不会静默丢失。
 

@@ -1,10 +1,10 @@
 /**
- * At-least-once inbox worker for the External Gateway.
+ * External Gateway 的至少一次投递 inbox worker。
  *
- * The worker serializes deliveries for one client/account/peer conversation
- * while allowing different conversations to proceed independently. A pending
- * row is always reloaded from storage before dispatch, which makes startup
- * recovery and repeated enqueue calls idempotent.
+ * worker 将同一客户端、账号和 peer 对话的投递串行化，
+ * 同时允许不同对话独立推进。调度前始终
+ * 从存储重新加载 pending 记录，使启动恢复和
+ * 重复入队调用保持幂等。
  * @module @deepseek-ai/dsh-external-gateway/worker
  */
 
@@ -20,19 +20,19 @@ import type {
 import type { GatewayClientId, GatewayDeliveryId, GatewayEventPayload } from './types.ts'
 import { ExternalGatewayStore, dispatchRequestOf } from './storage.ts'
 
-/** Runtime dependency and worker policy. */
+/** 运行时依赖和 worker 策略。 */
 export interface ExternalGatewayWorkerOptions {
-  /** Durable gateway store. */
+  /** 持久化网关存储。 */
   readonly store: ExternalGatewayStore
-  /** Existing DSH Session facade adapter. */
+  /** 现有 DSH Session 封装层适配器。 */
   readonly runtime: ExternalGatewayRuntime
-  /** Fixed cwd supplied to every dispatch request. */
+  /** 每次调度请求携带的固定 cwd。 */
   readonly startupCwd: string
-  /** Optional diagnostic sink; it must not receive bearer tokens. */
+  /** 可选的诊断接收端，绝不能接收 Bearer Token。 */
   readonly onError?: (error: unknown) => void
 }
 
-/** Snapshot of worker lifecycle useful to tests and health integrations. */
+/** 供测试和健康检查集成使用的 worker 生命周期快照。 */
 export interface ExternalGatewayWorkerState {
   readonly started: boolean
   readonly stopping: boolean
@@ -105,9 +105,9 @@ function mutationEvent(
 }
 
 /**
- * Durable worker that drains inbox rows into a Session runtime.
+ * 将 inbox 记录持续交给 Session 运行时处理的持久化 worker。
  *
- * @param options - Store, runtime, and fixed cwd.
+ * @param options - 存储、运行时和固定 cwd。
  */
 export class ExternalGatewayWorker {
   private readonly store: ExternalGatewayStore
@@ -124,7 +124,7 @@ export class ExternalGatewayWorker {
   private stopping = false
 
   /**
-   * @param options - Durable store and runtime adapter.
+   * @param options - 持久化存储和运行时适配器。
    */
   constructor(options: ExternalGatewayWorkerOptions) {
     this.store = options.store
@@ -133,7 +133,7 @@ export class ExternalGatewayWorker {
     this.onError = options.onError ?? (() => {})
   }
 
-  /** Current worker lifecycle and pending row count. */
+  /** 当前 worker 生命周期和待处理记录数量。 */
   get state(): ExternalGatewayWorkerState {
     return {
       started: this.started,
@@ -142,7 +142,7 @@ export class ExternalGatewayWorker {
     }
   }
 
-  /** Subscribe to runtime events and enqueue every durable pending row. */
+  /** 订阅运行时事件，并将全部持久化 pending 记录加入队列。 */
   async start(): Promise<void> {
     if (this.started) return
     if (this.stopping) throw new Error('external gateway worker is stopping')
@@ -157,7 +157,7 @@ export class ExternalGatewayWorker {
     for (const record of this.store.listPendingDeliveries()) this.enqueue(record)
   }
 
-  /** Re-scan pending inbox and runtime events after an outbox ack frees space. */
+  /** outbox 确认释放空间后，重新扫描待处理 inbox 和运行时事件。 */
   async resumePending(): Promise<void> {
     if (this.stopping) return
     for (const record of this.store.listPendingDeliveries()) this.enqueue(record)
@@ -168,7 +168,7 @@ export class ExternalGatewayWorker {
     }
   }
 
-  /** Stop admission, abort active runtime calls, and drain already scheduled work. */
+  /** 停止准入，取消活动运行时调用，并等待已调度工作结束。 */
   async close(): Promise<void> {
     if (this.stopping) return
     this.stopping = true
@@ -179,7 +179,7 @@ export class ExternalGatewayWorker {
     await this.runtimeEventTail
   }
 
-  /** Schedule one pending delivery while preserving conversation order. */
+  /** 调度一条待处理投递，同时保持对话顺序。 */
   enqueue(record: GatewayDeliveryRecord): void {
     if (this.stopping || record.status !== 'pending') return
     const key = conversationKey(record)
@@ -224,9 +224,9 @@ export class ExternalGatewayWorker {
         if (!this.store.ownsSession(peer, result.sessionId)) await this.store.claimSession(peer, result.sessionId)
         await this.store.markSessionReady(peer, result.sessionId, this.shouldSelect(prepared.record.payload))
       }
-      // All events are durable before the inbox is marked completed. A crash
-      // between these writes may duplicate events after restart, but cannot
-      // acknowledge a delivery whose completion event was lost.
+      // inbox 标记为已完成前，所有事件均已持久化。这些写入
+      // 之间发生崩溃可能导致重启后事件重复，但不会
+      // 确认一个完成事件已丢失的投递。
       await this.appendDeliveryEvent(prepared.record, {
         type: 'delivery-completed',
         deliveryId,
@@ -300,7 +300,7 @@ export class ExternalGatewayWorker {
     try {
       this.onError(error)
     } catch {
-      // Diagnostics must not become an unhandled worker rejection.
+      // 诊断处理不能导致 worker 出现未处理的 Promise 拒绝。
     }
   }
 }

@@ -1,9 +1,9 @@
 /**
- * Durable inbox, outbox, and peer ownership for the External Gateway.
+ * External Gateway 的持久化 inbox、outbox 和 peer 归属存储。
  *
- * The store deliberately uses the storage-domain service rather than a
- * database client.  The domain serializes individual writes; this class adds
- * a small operation queue for mutations that touch more than one table.
+ * 存储使用 storage-domain 服务，而非直接使用
+ * 数据库客户端。domain 将单次写入串行化；此类额外提供
+ * 一个小型操作队列，用于涉及多张表的变更。
  * @module @deepseek-ai/dsh-external-gateway/storage
  */
 
@@ -54,7 +54,7 @@ import type {
   JsonValue,
 } from './types.ts'
 
-/** The storage-domain schema used by one gateway installation. */
+/** 单个网关实例使用的 storage-domain 结构定义。 */
 export const externalGatewayDomainSpec = defineDomain({
   name: 'external_gateway',
   version: 3,
@@ -72,10 +72,10 @@ export const externalGatewayDomainSpec = defineDomain({
   },
 })
 
-/** The concrete domain type opened by {@link ExternalGatewayStore}. */
+/** {@link ExternalGatewayStore} 打开的具体 domain 类型。 */
 export type ExternalGatewayDomain = Domain<typeof externalGatewayDomainSpec>
 
-/** Stable store failures that the HTTP adapter can map to protocol errors. */
+/** HTTP 适配器可映射为协议错误的稳定存储错误。 */
 export type ExternalGatewayStoreErrorCode =
   | 'delivery-conflict'
   | 'delivery-not-found'
@@ -94,17 +94,17 @@ export type ExternalGatewayStoreErrorCode =
   | 'upload-checksum-mismatch'
   | 'upload-corrupt'
 
-/** Error raised for a rejected durable gateway operation. */
+/** 持久化网关操作被拒绝时抛出的错误。 */
 export class ExternalGatewayStoreError extends Error {
-  /** Stable protocol-facing code. */
+  /** 面向协议的稳定错误码。 */
   readonly code: ExternalGatewayStoreErrorCode
-  /** Non-secret structured details for a caller or log. */
+  /** 供调用方或日志使用、不含秘密信息的结构化详情。 */
   readonly details: Readonly<Record<string, unknown>>
 
   /**
-   * @param code - Stable failure code.
-   * @param message - Human-readable diagnostic.
-   * @param details - Safe structured facts associated with the failure.
+   * @param code - 稳定错误码。
+   * @param message - 便于阅读的诊断信息。
+   * @param details - 与错误关联的安全结构化事实。
    */
   constructor(
     code: ExternalGatewayStoreErrorCode,
@@ -118,59 +118,59 @@ export class ExternalGatewayStoreError extends Error {
   }
 }
 
-/** A peer identity after bearer-token matching. */
+/** Bearer Token 匹配后的 peer 身份。 */
 export interface ExternalGatewayPeer extends GatewayPeerIdentity {}
 
-/** Store options controlling deployment-varying retention and backpressure. */
+/** 控制随部署变化的保留期和背压策略的存储选项。 */
 export interface ExternalGatewayStoreOptions {
-  /** Open domain supplied by the storage-domain service. */
+  /** storage-domain 服务提供的已打开 domain。 */
   readonly domain: ExternalGatewayDomain
-  /** Fixed cwd recorded for Session ownership reservations. */
+  /** Session 归属预留记录使用的固定 cwd。 */
   readonly fixedCwd: string
-  /** Owner-private directory for encoded artifact files. */
+  /** 编码产物文件的所有者私有目录。 */
   readonly artifactDirectory?: string
-  /** Owner-private directory for resumable upload files. @default `<fixedCwd>/.dsh-external-gateway-uploads` */
+  /** 可恢复上传文件的所有者私有目录。 @default `<fixedCwd>/.dsh-external-gateway-uploads` */
   readonly uploadDirectory?: string
-  /** Maximum completed file upload bytes. @default protocol file limit */
+  /** 完整文件上传的最大字节数。 @default 协议文件上限 */
   readonly maxUploadBytes?: number
-  /** Maximum completed image upload bytes. @default protocol image limit */
+  /** 完整图片上传的最大字节数。 @default 协议图片上限 */
   readonly maxImageBytes?: number
-  /** Clock used for durable timestamps. @default `Date.now` */
+  /** 持久化时间戳使用的时钟。 @default `Date.now` */
   readonly now?: () => number
-  /** Completed inbox retention. @default 30 days */
+  /** 已完成 inbox 记录的保留期。 @default 30 天 */
   readonly completedRetentionMs?: number
-  /** Maximum unacknowledged events for one client. @default 10000 */
+  /** 单个客户端的最大未确认事件数。 @default 10000 */
   readonly maxOutbox?: number
 }
 
-/** Result of accepting an inbox delivery. */
+/** 接受 inbox 投递的结果。 */
 export interface AcceptedGatewayDelivery {
-  /** Durable record, including its current lifecycle state. */
+  /** 包含当前生命周期状态的持久化记录。 */
   readonly record: GatewayDeliveryRecord
-  /** Whether the request was an idempotent replay. */
+  /** 请求是否为幂等重放。 */
   readonly duplicate: boolean
 }
 
-/** Event page returned by the outbox cursor. */
+/** outbox 游标返回的事件分页。 */
 export interface GatewayEventPage {
   readonly events: readonly GatewayEvent[]
   readonly nextSequence: number
 }
 
-/** Result of acknowledging a contiguous outbox prefix. */
+/** 确认 outbox 连续前缀的结果。 */
 export interface GatewayAckResult {
   readonly upToSequence: number
   readonly removed: number
 }
 
-/** Result of writing one upload part. */
+/** 写入单个上传分块的结果。 */
 export interface GatewayUploadPartResult {
   readonly record: GatewayUploadRecord
   readonly part: GatewayUploadPartRecord
   readonly duplicate: boolean
 }
 
-/** Result of completing one upload. */
+/** 完成单次上传的结果。 */
 export interface GatewayUploadCompletionResult {
   readonly record: GatewayUploadRecord
 }
@@ -235,11 +235,11 @@ const WINDOWS_RESERVED_FILENAMES = new Set([
 ])
 
 /**
- * Convert an untrusted upload name to one safe filename component.
- * Separators, control characters, Windows-invalid characters, and reserved
- * device names are removed before the UTF-8 length cap is applied.
- * @param filename - Client-supplied display name.
- * @returns A non-empty filename that cannot select a parent directory.
+ * 将不可信的上传名称转换为安全的单个文件名组成部分。
+ * 应用 UTF-8 长度上限前，移除分隔符、控制字符、
+ * Windows 非法字符及保留设备名称。
+ * @param filename - 客户端提供的显示名称。
+ * @returns 无法指向父目录的非空文件名。
  */
 export function sanitizeGatewayFilename(filename: string): string {
   const normalized = filename.normalize('NFC')
@@ -304,7 +304,7 @@ function withoutDeliveryErrors(record: GatewayDeliveryRecord): Omit<GatewayDeliv
   return next
 }
 
-/** Stable JSON encoding used for delivery conflict detection. */
+/** 用于检测投递冲突的稳定 JSON 编码。 */
 export function canonicalJson(value: JsonValue): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value)
   if (Array.isArray(value)) return `[${value.map(item => canonicalJson(item)).join(',')}]`
@@ -321,10 +321,10 @@ function isAutoCreatePayload(delivery: GatewayDelivery): boolean {
 }
 
 /**
- * Domain-backed persistence for the External Gateway.
+ * 基于 domain 的 External Gateway 持久化实现。
  *
- * Reads return defensive copies. Compound methods are serialized here so a
- * delivery cannot observe a half-written ownership or sequence update.
+ * 读取返回防御性副本；复合方法在此串行执行，避免
+ * 投递看到仅写入了一部分的归属或序号更新。
  */
 export class ExternalGatewayStore {
   private readonly deliveries: DeliveryTable
@@ -349,7 +349,7 @@ export class ExternalGatewayStore {
   private readonly eventWaiters = new Map<string, () => void>()
 
   /**
-   * @param options - Open domain and validated retention/backpressure policy.
+   * @param options - 已打开的 domain 和已校验的保留期、背压策略。
    */
   constructor(options: ExternalGatewayStoreOptions) {
     if (options.fixedCwd.trim().length === 0) throw new TypeError('external gateway fixedCwd must not be empty')
@@ -388,17 +388,17 @@ export class ExternalGatewayStore {
     this.maxOutbox = options.maxOutbox ?? DEFAULT_MAX_OUTBOX
   }
 
-  /** Fixed cwd recorded in every new ownership reservation. */
+  /** 每条新归属预留记录使用的固定 cwd。 */
   get startupCwd(): string {
     return this.fixedCwd
   }
 
   /**
-   * Admit one delivery or return the existing record for an idempotent retry.
-   * The record is durable before the method resolves.
-   * @param clientId - Credential-derived client id.
-   * @param delivery - Parsed wire delivery.
-   * @returns durable record and duplicate marker.
+   * 接受一条投递，或在幂等重试时返回已有记录。
+   * 方法完成前，记录已持久化。
+   * @param clientId - 由凭据推导的客户端 ID。
+   * @param delivery - 已解析的传输投递数据。
+   * @returns 持久化记录及重复标记。
    */
   async acceptDelivery(clientId: GatewayClientIdValue, delivery: GatewayDelivery): Promise<AcceptedGatewayDelivery> {
     return this.serialize(async () => {
@@ -437,13 +437,13 @@ export class ExternalGatewayStore {
     })
   }
 
-  /** Read one delivery for idempotency and worker recovery. */
+  /** 读取一条投递，用于幂等检查和 worker 恢复。 */
   getDelivery(clientId: GatewayClientIdValue, deliveryId: GatewayDeliveryIdValue): GatewayDeliveryRecord | undefined {
     const found = this.deliveries.get(deliveryKey(clientId, deliveryId))
     return found === undefined ? undefined : clone(found)
   }
 
-  /** List all pending deliveries in admission order. */
+  /** 按准入顺序列出全部待处理投递。 */
   listPendingDeliveries(): readonly GatewayDeliveryRecord[] {
     return [...this.deliveries.entries()]
       .map(([, record]) => record)
@@ -452,7 +452,7 @@ export class ExternalGatewayStore {
       .map(record => clone(record))
   }
 
-  /** Increment one worker attempt and return the updated record. */
+  /** 增加一次 worker 尝试次数并返回更新后的记录。 */
   async beginDelivery(clientId: GatewayClientIdValue, deliveryId: GatewayDeliveryIdValue): Promise<GatewayDeliveryRecord> {
     return this.serialize(async () => {
       const key = deliveryKey(clientId, deliveryId)
@@ -468,7 +468,7 @@ export class ExternalGatewayStore {
     })
   }
 
-  /** Mark one delivery completed after the Host accepted its mutation. */
+  /** 宿主接受变更后，将投递标记为已完成。 */
   async completeDelivery(
     clientId: GatewayClientIdValue,
     deliveryId: GatewayDeliveryIdValue,
@@ -492,7 +492,7 @@ export class ExternalGatewayStore {
     })
   }
 
-  /** Mark one delivery failed while keeping it available for diagnostics. */
+  /** 将投递标记为失败，并保留记录以供诊断。 */
   async failDelivery(
     clientId: GatewayClientIdValue,
     deliveryId: GatewayDeliveryIdValue,
@@ -514,7 +514,7 @@ export class ExternalGatewayStore {
     })
   }
 
-  /** Reset a failed record for an explicit retry request. */
+  /** 为显式重试请求重置失败记录。 */
   async retryDelivery(clientId: GatewayClientIdValue, deliveryId: GatewayDeliveryIdValue): Promise<GatewayDeliveryRecord> {
     return this.serialize(async () => {
       const key = deliveryKey(clientId, deliveryId)
@@ -532,12 +532,12 @@ export class ExternalGatewayStore {
   }
 
   /**
-   * Reserve an explicit Session identity before the runtime is called.
-   * Create and auto-targeted message/command deliveries persist this id in the
-   * inbox and active conversation mapping, so a crash cannot mint a second id.
-   * @param clientId - Credential-derived client id.
-   * @param deliveryId - Delivery being prepared.
-   * @returns the updated delivery and optional reserved Session id.
+   * 调用运行时前预留显式 Session 标识符。
+   * 创建操作和自动确定目标的消息或命令投递会将此 ID 持久化到
+   * inbox 和活动对话映射中，避免崩溃后生成第二个 ID。
+   * @param clientId - 由凭据推导的客户端 ID。
+   * @param deliveryId - 正在准备的投递。
+   * @returns 更新后的投递及可选的预留 Session ID。
    */
   async reserveSessionForDelivery(
     clientId: GatewayClientIdValue,
@@ -557,9 +557,9 @@ export class ExternalGatewayStore {
         reservedSessionId: sessionId,
         updatedAt: timestamp,
       }
-      // Persist the reservation in the inbox before touching ownership. If
-      // the following ownership write fails, retrying this same delivery
-      // still uses the same explicit Session id.
+      // 修改归属前，先将预留 ID 持久化到 inbox。如果
+      // 后续归属写入失败，重试同一投递
+      // 仍使用相同的显式 Session ID。
       if (current.reservedSessionId === undefined) {
         await this.deliveries.put(deliveryKeyValue, reserved)
       }
@@ -579,13 +579,13 @@ export class ExternalGatewayStore {
     })
   }
 
-  /** Return one peer-owned Session or `undefined` without leaking other peers. */
+  /** 返回当前 peer 所属 Session 或 `undefined`，不泄露其他 peer 的信息。 */
   ownsSession(peer: ExternalGatewayPeer, sessionId: SessionId): boolean {
     const record = this.sessions.get(sessionKey(peer.clientId, peer.accountId, peer.peerId, sessionId))
     return record !== undefined
   }
 
-  /** Reserve a Session identity for one peer before Host creation. */
+  /** 宿主创建前，为当前 peer 预留 Session 标识符。 */
   async claimSession(peer: ExternalGatewayPeer, sessionId: SessionId): Promise<boolean> {
     return this.serialize(async () => this.claimSessionUnsafe(peer, sessionId))
   }
@@ -617,7 +617,7 @@ export class ExternalGatewayStore {
     return true
   }
 
-  /** Mark a reserved Session as Host-created and optionally active. */
+  /** 将预留 Session 标记为宿主已创建，并可选设为活动 Session。 */
   async markSessionReady(
     peer: ExternalGatewayPeer,
     sessionId: SessionId,
@@ -634,7 +634,7 @@ export class ExternalGatewayStore {
     })
   }
 
-  /** Read all Session ownership records for a peer in creation order. */
+  /** 按创建顺序读取当前 peer 的全部 Session 归属记录。 */
   listSessions(peer: ExternalGatewayPeer): readonly GatewaySessionOwnershipRecord[] {
     return [...this.sessions.entries()]
       .map(([, value]) => value)
@@ -643,14 +643,14 @@ export class ExternalGatewayStore {
       .map(value => clone(value))
   }
 
-  /** Read every ownership row for startup projection recovery. */
+  /** 读取全部归属记录，用于启动时恢复投影。 */
   listAllSessions(): readonly GatewaySessionOwnershipRecord[] {
     return [...this.sessions.entries()]
       .map(([, value]) => clone(value))
       .sort((left, right) => left.createdAt - right.createdAt || String(left.sessionId).localeCompare(String(right.sessionId)))
   }
 
-  /** Find the owning client/account/peer for a Session id without exposing other rows. */
+  /** 查找 Session ID 所属的客户端、账号和 peer，不暴露其他记录。 */
   ownerOfSession(sessionId: SessionId): ExternalGatewayPeer | undefined {
     for (const [, record] of this.sessions.entries()) {
       if (record.sessionId === sessionId) {
@@ -660,12 +660,12 @@ export class ExternalGatewayStore {
     return undefined
   }
 
-  /** Return the last Session event copied durably into the client outbox. */
+  /** 返回最后一个已持久化复制到客户端 outbox 的 Session 事件。 */
   projectedSequence(sessionId: SessionId): number {
     return this.projectionCursors.get(projectionCursorKey(sessionId))?.sequence ?? 0
   }
 
-  /** Advance one Session projection cursor after its outbox events are durable. */
+  /** outbox 事件持久化后，推进对应 Session 的投影游标。 */
   async markProjected(sessionId: SessionId, sequence: number): Promise<void> {
     await this.serialize(async () => {
       const key = projectionCursorKey(sessionId)
@@ -675,7 +675,7 @@ export class ExternalGatewayStore {
     })
   }
 
-  /** Persist one peer-owned artifact file and its lookup metadata. */
+  /** 持久化当前 peer 所属产物文件及其查询元数据。 */
   async saveArtifact(
     peer: ExternalGatewayPeer,
     sessionId: SessionId,
@@ -703,15 +703,15 @@ export class ExternalGatewayStore {
     try {
       await this.serialize(async () => this.artifacts.put(artifactKey(peer.clientId, artifactId), record))
     } catch (error) {
-      // The durable metadata is the authorization source. Remove an orphan
-      // file if its matching record could not be committed.
+      // 持久化元数据是授权依据；若对应记录无法提交，
+      // 则删除孤立文件。
       await rm(path, { force: true })
       throw error
     }
     return clone(record)
   }
 
-  /** Read one artifact only when the credential-derived peer owns it. */
+  /** 仅在凭据推导出的 peer 拥有产物时读取该产物。 */
   async readArtifact(
     peer: ExternalGatewayPeer,
     artifactId: string,
@@ -723,13 +723,13 @@ export class ExternalGatewayStore {
   }
 
   /**
-   * Start or resume one owner-scoped upload.
-   * The metadata row is durable before this method resolves. A client-supplied
-   * upload id makes repeated initiation idempotent; the same id with different
-   * metadata is rejected.
-   * @param clientId - Credential-derived client id.
-   * @param request - Owner address and upload metadata.
-   * @returns Durable metadata and whether an existing row was reused.
+   * 启动或恢复一次按所有者隔离的上传。
+   * 方法完成前，元数据记录已持久化。客户端提供的
+   * 上传 ID 使重复初始化保持幂等；同一 ID 对应不同
+   * 元数据时拒绝请求。
+   * @param clientId - 由凭据推导的客户端 ID。
+   * @param request - 所有者地址和上传元数据。
+   * @returns 持久化元数据及是否复用了已有记录。
    */
   async createUpload(
     clientId: GatewayClientIdValue,
@@ -793,20 +793,20 @@ export class ExternalGatewayStore {
     })
   }
 
-  /** Read one upload row by credential-derived client id. */
+  /** 按凭据推导出的客户端 ID 读取上传记录。 */
   getUploadForClient(clientId: string, uploadId: string): GatewayUploadRecord | undefined {
     const record = this.uploads.get(uploadKey(clientId, uploadId))
     return record === undefined ? undefined : clone(record)
   }
 
-  /** Read one upload only when the authenticated peer owns its address. */
+  /** 仅在已认证 peer 拥有该上传地址时读取上传。 */
   getUpload(peer: ExternalGatewayPeer, uploadId: string): GatewayUploadRecord | undefined {
     const record = this.getUploadForClient(peer.clientId, uploadId)
     if (record === undefined || record.accountId !== peer.accountId || record.peerId !== peer.peerId) return undefined
     return record
   }
 
-  /** List upload metadata owned by one authenticated peer. */
+  /** 列出已认证 peer 所属的上传元数据。 */
   listUploads(peer: ExternalGatewayPeer): readonly GatewayUploadRecord[] {
     return [...this.uploads.entries()]
       .map(([, record]) => record)
@@ -816,14 +816,14 @@ export class ExternalGatewayStore {
   }
 
   /**
-   * Write one fixed-size upload part.
-   * Repeating a part with the same digest is idempotent. A different digest for
-   * an already stored part is rejected without changing the durable row.
-   * @param peer - Credential-derived owner identity.
-   * @param uploadId - Upload to mutate.
-   * @param partNumber - Zero-based part number.
-   * @param bytes - Raw part bytes, at most 4 MiB and exact for its position.
-   * @returns Updated metadata, part digest, and duplicate marker.
+   * 写入一个固定大小的上传分块。
+   * 以相同摘要重复提交分块保持幂等；已存储分块对应的
+   * 摘要不同时拒绝请求，不修改持久化记录。
+   * @param peer - 由凭据推导的所有者身份。
+   * @param uploadId - 待修改的上传。
+   * @param partNumber - 从零开始的分块编号。
+   * @param bytes - 原始分块字节，最多 4 MiB，且大小必须符合其所在位置。
+   * @returns 更新后的元数据、分块摘要和重复标记。
    */
   async putUploadPart(
     peer: ExternalGatewayPeer,
@@ -898,12 +898,12 @@ export class ExternalGatewayStore {
   }
 
   /**
-   * Assemble every received part into the fixed-cwd upload file.
-   * Completion is idempotent after the durable status changes to `completed`.
-   * @param peer - Credential-derived owner identity.
-   * @param uploadId - Upload to commit.
-   * @param request - Optional expected whole-file checksum.
-   * @returns Completed metadata with the computed SHA-256 digest.
+   * 将收到的全部分块组装为固定 cwd 下的上传文件。
+   * 持久化状态变为 `completed` 后，完成操作保持幂等。
+   * @param peer - 由凭据推导的所有者身份。
+   * @param uploadId - 待提交的上传。
+   * @param request - 可选的预期整文件校验和。
+   * @returns 包含计算所得 SHA-256 摘要的已完成元数据。
    */
   async completeUpload(
     peer: ExternalGatewayPeer,
@@ -982,7 +982,7 @@ export class ExternalGatewayStore {
     })
   }
 
-  /** Read a completed upload's bytes after owner validation. */
+  /** 校验所有者后读取已完成上传的字节。 */
   async readUpload(
     peer: ExternalGatewayPeer,
     uploadId: string,
@@ -995,7 +995,7 @@ export class ExternalGatewayStore {
     return { record: clone(record), bytes }
   }
 
-  /** Return the fixed-cwd path of a completed owner-owned upload without reading it. */
+  /** 返回当前所有者已完成上传在固定 cwd 下的路径，不读取文件。 */
   completedUploadPath(peer: ExternalGatewayPeer, uploadId: string): string {
     const record = this.requireOwnedUpload(peer, uploadId)
     if (record.status !== 'completed') {
@@ -1005,13 +1005,13 @@ export class ExternalGatewayStore {
   }
 
   /**
-   * Copy a completed owner-owned file into the root Session's fixed-cwd inbox.
-   * The permanent upload staging directory remains private to the protocol and
-   * never becomes a model-visible path.
-   * @param peer - Authenticated upload owner.
-   * @param uploadId - Completed file upload identifier.
-   * @param sessionId - Root Session that receives the file.
-   * @returns Stable file path under the fixed gateway workspace.
+   * 将当前所有者已完成的文件复制到根 Session 固定 cwd 下的 inbox。
+   * 长期上传暂存目录仅供协议内部使用，
+   * 绝不作为模型可见路径。
+   * @param peer - 已认证的上传所有者。
+   * @param uploadId - 已完成文件上传的标识符。
+   * @param sessionId - 接收文件的根 Session。
+   * @returns 固定网关工作区内的稳定文件路径。
    */
   async materializeUploadFile(
     peer: ExternalGatewayPeer,
@@ -1075,14 +1075,14 @@ export class ExternalGatewayStore {
     return candidate
   }
 
-  /** Read a peer's active Session after validating ownership. */
+  /** 校验归属后读取 peer 的活动 Session。 */
   activeSession(peer: ExternalGatewayPeer): SessionId | undefined {
     const record = this.conversations.get(conversationKey(peer.clientId, peer.accountId, peer.peerId))
     if (record?.sessionId === undefined) return undefined
     return this.ownsSession(peer, record.sessionId) ? record.sessionId : undefined
   }
 
-  /** Persist a peer's active Session selection. */
+  /** 持久化 peer 的活动 Session 选择。 */
   async setActiveSession(peer: ExternalGatewayPeer, sessionId: SessionId | undefined): Promise<void> {
     await this.serialize(async () => this.setActiveUnsafe(peer, sessionId))
   }
@@ -1109,26 +1109,26 @@ export class ExternalGatewayStore {
     }
   }
 
-  /** Verify that an ownership record has no workspace attachment. */
+  /** 校验归属记录未关联工作区。 */
   isUngrouped(peer: ExternalGatewayPeer, sessionId: SessionId): boolean {
     const record = this.sessions.get(sessionKey(peer.clientId, peer.accountId, peer.peerId, sessionId))
     return record !== undefined
   }
 
-  /** Persist one pending question or approval interaction. */
+  /** 持久化一个待决问题或审批交互。 */
   async saveInteraction(record: GatewayInteractionRecord): Promise<void> {
     await this.serialize(async () => {
       await this.interactions.put(interactionKey(record.clientId, record.interactionId), clone(record))
     })
   }
 
-  /** Read one interaction without exposing another client’s record. */
+  /** 读取单个交互，不暴露其他客户端的记录。 */
   getInteraction(clientId: GatewayClientIdValue, interactionId: GatewayInteractionIdValue): GatewayInteractionRecord | undefined {
     const record = this.interactions.get(interactionKey(clientId, interactionId))
     return record === undefined ? undefined : clone(record)
   }
 
-  /** Check peer/session ownership and pending lifetime for an interaction. */
+  /** 检查交互的 peer、Session 归属及待决有效期。 */
   ownsInteraction(
     peer: ExternalGatewayPeer,
     sessionId: SessionId,
@@ -1145,7 +1145,7 @@ export class ExternalGatewayStore {
       && record.expiresAt > this.now()
   }
 
-  /** Mark an interaction answered or expired. */
+  /** 将交互标记为已回答或已过期。 */
   async finishInteraction(
     clientId: GatewayClientIdValue,
     interactionId: GatewayInteractionIdValue,
@@ -1161,7 +1161,7 @@ export class ExternalGatewayStore {
     })
   }
 
-  /** Append one outbox event, enforcing the per-client backlog limit. */
+  /** 追加一个 outbox 事件，并执行每客户端积压上限检查。 */
   async appendEvent(
     clientId: GatewayClientIdValue,
     address: Pick<GatewayDelivery, 'accountId' | 'peerId'>,
@@ -1200,8 +1200,8 @@ export class ExternalGatewayStore {
         payload,
         createdAt: this.now(),
       }
-      // Write the event before advancing sequence state. A crash can leave a
-      // harmless duplicate sequence candidate, but never a state-only gap.
+      // 推进序号状态前先写入事件；崩溃可能留下
+      // 无害的重复序号候选，但绝不会仅推进状态而留下事件缺口。
       await this.outbox.put(eventKey(clientId, sequence), event)
       await this.clients.put(clientKey(clientId), { ...state, nextSequence: sequence + 1 })
       this.notify(clientId)
@@ -1209,7 +1209,7 @@ export class ExternalGatewayStore {
     })
   }
 
-  /** Return a page after an exclusive client sequence cursor. */
+  /** 返回客户端排他序号游标之后的一页事件。 */
   listEvents(clientId: GatewayClientIdValue, after: number, limit: number): GatewayEventPage {
     const acknowledged = this.clients.get(clientKey(clientId))?.acknowledgedSequence ?? 0
     const events = [...this.outbox.entries()]
@@ -1223,8 +1223,8 @@ export class ExternalGatewayStore {
   }
 
   /**
-   * Wait for events or a bounded timeout. Only one active long poll is allowed
-   * per authenticated client.
+   * 等待事件或有界超时；每个已认证客户端
+   * 仅允许一个活动长轮询。
    */
   async waitForEvents(
     clientId: GatewayClientIdValue,
@@ -1253,7 +1253,7 @@ export class ExternalGatewayStore {
     return this.listEvents(clientId, after, limit)
   }
 
-  /** Acknowledge and delete an existing contiguous outbox prefix. */
+  /** 确认并删除已存在的 outbox 连续前缀。 */
   async acknowledge(clientId: GatewayClientIdValue, upToSequence: number): Promise<GatewayAckResult> {
     return this.serialize(async () => {
       if (!Number.isSafeInteger(upToSequence) || upToSequence < 0) {
@@ -1291,8 +1291,8 @@ export class ExternalGatewayStore {
         }
         return { upToSequence, removed: await this.deleteAcknowledged(clientId, upToSequence) }
       }
-      // The cursor is durable before rows are removed, so a crash cannot cause
-      // an acknowledged event to be re-acknowledged as unconfirmed.
+      // 删除记录前先持久化游标，避免崩溃后
+      // 将已确认事件视为未确认事件再次确认。
       await this.clients.put(clientKey(clientId), {
         ...state,
         nextSequence: maxStoredSequence + 1,
@@ -1303,7 +1303,7 @@ export class ExternalGatewayStore {
     })
   }
 
-  /** Remove completed inbox rows older than the configured retention. */
+  /** 删除超过配置保留期的已完成 inbox 记录。 */
   async pruneCompleted(now = this.now()): Promise<number> {
     return this.serialize(async () => {
       const cutoff = now - this.completedRetentionMs
@@ -1316,7 +1316,7 @@ export class ExternalGatewayStore {
     })
   }
 
-  /** Return ownership callbacks suitable for the Session runtime facade. */
+  /** 返回适用于 Session 运行时封装层的归属回调。 */
   ownership(): {
     readonly ownsSession: (peer: ExternalGatewayPeer, sessionId: SessionId) => boolean
     readonly claimSession: (peer: ExternalGatewayPeer, sessionId: SessionId) => Promise<boolean>
@@ -1335,7 +1335,7 @@ export class ExternalGatewayStore {
     }
   }
 
-  /** Number of currently unacknowledged events for one client. */
+  /** 单个客户端当前未确认的事件数量。 */
   countOutstanding(clientId: GatewayClientIdValue): number {
     const acknowledged = this.clients.get(clientKey(clientId))?.acknowledgedSequence ?? 0
     return [...this.outbox.entries()].reduce(
@@ -1371,7 +1371,7 @@ export class ExternalGatewayStore {
   }
 }
 
-/** Convert a durable delivery record back into the worker's dispatch input. */
+/** 将持久化投递记录转换回 worker 的调度输入。 */
 export function dispatchRequestOf(record: GatewayDeliveryRecord, cwd: string): ExternalGatewayDispatchRequest {
   return {
     clientId: record.clientId,

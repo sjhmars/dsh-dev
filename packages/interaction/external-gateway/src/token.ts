@@ -1,4 +1,4 @@
-/** Owner-only persistent bearer-token management for the External Gateway. */
+/** External Gateway 仅所有者可访问的持久化 Bearer Token 管理。 */
 
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { lstat, mkdir, readFile, stat } from 'node:fs/promises'
@@ -6,29 +6,29 @@ import { resolve } from 'node:path'
 import type { IncomingMessage } from 'node:http'
 import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 
-/** One loaded token and its redacted diagnostic fingerprint. */
+/** 已加载的 token 及其脱敏诊断指纹。 */
 export interface GatewayToken {
-  /** Absolute token file path. */
+  /** token 文件的绝对路径。 */
   readonly path: string
-  /** Raw bearer token kept in memory for request verification only. */
+  /** 仅保存在内存中用于请求校验的原始 Bearer Token。 */
   readonly value: string
-  /** First twelve hexadecimal characters of the SHA-256 digest. */
+  /** SHA-256 摘要的前十二个十六进制字符。 */
   readonly fingerprint: string
 }
 
-/** The fixed format emitted by {@link loadOrCreateGatewayToken}. */
+/** {@link loadOrCreateGatewayToken} 生成的固定格式。 */
 export const GATEWAY_TOKEN_BYTES = 32
-/** The raw token's hexadecimal character count. */
+/** 原始 token 的十六进制字符数。 */
 export const GATEWAY_TOKEN_LENGTH = GATEWAY_TOKEN_BYTES * 2
 
 const TOKEN_RE = /^[a-f0-9]{64}$/u
 
-/** Whether the current platform exposes POSIX permission bits. */
+/** 当前平台是否提供 POSIX 权限位。 */
 function hasPosixModes(): boolean {
   return process.platform !== 'win32'
 }
 
-/** Reject a path that is not an ordinary file or an owner-private directory. */
+/** 拒绝非普通文件或非所有者私有目录的路径。 */
 async function assertTokenPath(path: string): Promise<void> {
   const parent = resolve(path, '..')
   await mkdir(parent, { recursive: true, mode: 0o700 })
@@ -49,7 +49,7 @@ async function assertTokenPath(path: string): Promise<void> {
   }
 }
 
-/** Read and validate the exact persisted token representation. */
+/** 读取并校验持久化 token 的确切表示。 */
 async function readToken(path: string): Promise<string> {
   await assertTokenPath(path)
   let text: string
@@ -68,7 +68,7 @@ async function readToken(path: string): Promise<string> {
   return value
 }
 
-/** Generate or load one persistent owner-only bearer token. */
+/** 生成或加载一个仅所有者可访问的持久化 Bearer Token。 */
 export async function loadOrCreateGatewayToken(configuredPath: string): Promise<GatewayToken> {
   const path = resolve(configuredPath)
   await assertTokenPath(path)
@@ -90,7 +90,7 @@ export async function loadOrCreateGatewayToken(configuredPath: string): Promise<
   }
 }
 
-/** Extract exactly one bearer token from a Node HTTP request. */
+/** 从 Node HTTP 请求中提取且仅提取一个 Bearer Token。 */
 export function bearerTokenOf(request: IncomingMessage): string | undefined {
   const values = request.headersDistinct.authorization
   if (values === undefined || values.length !== 1) return undefined
@@ -100,7 +100,7 @@ export function bearerTokenOf(request: IncomingMessage): string | undefined {
   return match?.[1]
 }
 
-/** Compare one request token to the loaded value without early-exit timing. */
+/** 比较请求 token 与已加载的值，避免提前退出造成计时差异。 */
 export function hasValidBearerToken(request: IncomingMessage, expected: string): boolean {
   const actual = bearerTokenOf(request)
   if (actual === undefined) return false

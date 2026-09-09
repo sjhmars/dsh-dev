@@ -1,8 +1,8 @@
 /**
- * Authenticated, durable `/v1` HTTP gateway for non-browser DSH clients.
+ * 为非浏览器 DSH 客户端提供认证和持久化的 `/v1` HTTP 网关。
  *
- * This package adapts the existing Host Session services and owns protocol parsing, persistence,
- * token loading, and delivery scheduling; it never mounts the browser API.
+ * 本包适配现有宿主 Session 服务，负责协议解析、持久化、
+ * token 加载和投递调度，绝不挂载浏览器 API。
  * @module @deepseek-ai/dsh-external-gateway
  */
 
@@ -71,12 +71,12 @@ export { ExternalGatewayHostRuntime, ExternalGatewayHostRuntimeError } from './h
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
-    /** Durable external protocol service. */
+    /** 持久化外部协议服务。 */
     externalGateway: ExternalGatewayService
   }
 }
 
-/** External Gateway service configuration. */
+/** External Gateway 服务配置。 */
 export type Config = Omit<ExternalGatewayConfig, 'startupCwd'> & { readonly startupCwd: string }
 
 const DEFAULT_MAX_BODY_BYTES = 2_000_000
@@ -101,17 +101,17 @@ function nonNegativeSafeInteger(value: number, name: string): number {
 }
 
 /**
- * Cordis service mounting the durable store, worker, token verifier, and
- * loopback HTTP routes.
+ * 挂载持久化存储、worker、token 校验器和
+ * 回环 HTTP 路由的 Cordis 服务。
  */
 export class ExternalGatewayService extends Service {
-  /** Required Host capabilities reused from the Web Host assembly. */
+  /** 复用 Web 宿主组装所需的宿主能力。 */
   static inject = [
     'agents', 'commands', 'permissionPresets', 'sessionController',
     'sessionSkillCatalog', 'storageDomain', 'subagents', 'webServer',
   ]
 
-  /** Validated deployment configuration. */
+  /** 已校验的部署配置。 */
   static Config: z<Config> = z.object({
     tokenFile: z.string().min(1).default(DEFAULT_TOKEN_FILE),
     artifactDirectory: z.string().min(1).default(DEFAULT_ARTIFACT_DIRECTORY),
@@ -135,24 +135,24 @@ export class ExternalGatewayService extends Service {
   private disposeRoutes: (() => void) | undefined
 
   /**
-   * @param ctx - Cordis context containing the Web Host capability assembly.
-   * @param config - Validated External Gateway policy.
+   * @param ctx - 包含 Web 宿主能力组装的 Cordis 上下文。
+   * @param config - 已校验的 External Gateway 策略。
    */
   constructor(ctx: Context, private readonly config: Config) {
     super(ctx, 'externalGateway')
   }
 
-  /** Loaded token file path, available for diagnostics without revealing its value. */
+  /** 已加载的 token 文件路径，可用于诊断而不泄露 token 值。 */
   get loadedTokenPath(): string | undefined {
     return this.tokenPath
   }
 
-  /** Durable store mounted by this service after initialization. */
+  /** 此服务初始化后挂载的持久化存储。 */
   get gatewayStore(): ExternalGatewayStore | undefined {
     return this.store
   }
 
-  /** Start protocol routes after the durable domain and Host adapter are ready. */
+  /** 持久化 domain 和宿主适配器就绪后启动协议路由。 */
   protected async [Service.init](): Promise<void> {
     const startupCwd = resolve(this.config.startupCwd)
     const domain = await this.ctx.storageDomain.open(externalGatewayDomainSpec)
@@ -206,10 +206,10 @@ export class ExternalGatewayService extends Service {
   }
 }
 
-/** Cordis plugin name. */
+/** Cordis 插件名称。 */
 export const name = 'external-gateway'
 
-/** Required service names for plugin activation. */
+/** 激活插件所需的服务名称。 */
 export const inject = ExternalGatewayService.inject
 
 export default ExternalGatewayService

@@ -1,4 +1,4 @@
-/** Strict wire and durable-record schemas for the External Gateway. */
+/** External Gateway 严格的传输数据和持久化记录结构定义。 */
 
 import { z } from 'zod'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -19,36 +19,36 @@ import type {
   GatewaySessionOwnershipRecord,
 } from './types.ts'
 
-/** Maximum length of one opaque protocol identity. */
+/** 单个不透明协议标识符的最大长度。 */
 export const MAX_ID_LENGTH = 512
-/** Maximum text length accepted in one message block. */
+/** 单个消息块接受的最大文本长度。 */
 export const MAX_TEXT_LENGTH = 1_000_000
-/** Maximum number of message blocks in one delivery. */
+/** 单次投递的最大消息块数量。 */
 export const MAX_CONTENT_BLOCKS = 128
-/** Maximum number of choices in one question answer. */
+/** 单个问题回答的最大选项数量。 */
 export const MAX_QUESTION_ANSWERS = 128
-/** Maximum bytes admitted by one resumable upload part. */
+/** 单个可恢复上传分块接受的最大字节数。 */
 export const GATEWAY_UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024
-/** Maximum complete file upload size accepted by the gateway. */
+/** 网关接受的完整文件上传大小上限。 */
 export const MAX_GATEWAY_UPLOAD_BYTES = 100 * 1024 * 1024
-/** Maximum complete image upload size accepted by the gateway. */
+/** 网关接受的完整图片上传大小上限。 */
 export const MAX_GATEWAY_IMAGE_BYTES = 20 * 1024 * 1024
-/** Maximum UTF-8 bytes retained in one uploaded filename. */
+/** 上传文件名保留的最大 UTF-8 字节数。 */
 export const MAX_UPLOAD_FILENAME_BYTES = 255
 
-/** A non-empty, trimmed opaque string at a wire boundary. */
+/** 传输边界处去除首尾空白后的非空不透明字符串。 */
 export const opaqueStringSchema = z.string()
   .min(1)
   .max(MAX_ID_LENGTH)
   .refine(value => value.trim() === value && value.length > 0, 'value must be trimmed and non-empty')
 
-/** A non-negative safe integer used for sequence, timestamp, and cursor fields. */
+/** 用于序号、时间戳和游标字段的非负安全整数。 */
 export const safeIntegerSchema = z.number()
   .int()
   .nonnegative()
   .max(Number.MAX_SAFE_INTEGER)
 
-/** Lossless JSON data accepted in event projections and runtime results. */
+/** 事件投影和运行时结果接受的无损 JSON 数据。 */
 export const jsonValueSchema: z.ZodType<unknown> = z.lazy(() => z.union([
   z.null(),
   z.boolean(),
@@ -58,16 +58,16 @@ export const jsonValueSchema: z.ZodType<unknown> = z.lazy(() => z.union([
   z.record(z.string(), jsonValueSchema),
 ]))
 
-/** A Session id with its compile-time brand restored after JSON parsing. */
+/** JSON 解析后恢复编译时类型品牌的 Session ID。 */
 export const sessionIdSchema = opaqueStringSchema.transform(value => value as SessionId)
 
-/** A message text block. */
+/** 消息文本块。 */
 export const gatewayTextContentSchema = z.object({
   type: z.literal('text'),
   text: z.string().min(1).max(MAX_TEXT_LENGTH),
 }).strict()
 
-/** An encoded image promoted to durable Session attachment storage by the Host. */
+/** 由宿主转入 Session 持久化附件存储的编码图片。 */
 export const gatewayImageContentSchema = z.object({
   type: z.literal('image'),
   mediaType: z.union([
@@ -83,25 +83,25 @@ export const gatewayImageContentSchema = z.object({
   message: 'image content must provide exactly one of data or uploadId',
 })
 
-/** A completed upload referenced by a later Session message. */
+/** 供后续 Session 消息引用的已完成上传。 */
 export const gatewayUploadContentSchema = z.object({
   type: z.literal('upload'),
   uploadId: opaqueStringSchema,
 }).strict()
 
-/** Explicit file-upload reference accepted by the message protocol. */
+/** 消息协议接受的显式文件上传引用。 */
 export const gatewayFileContentSchema = z.object({
   type: z.literal('file'),
   uploadId: opaqueStringSchema,
 }).strict()
 
-/** A named skill reference carried by a message. */
+/** 消息携带的具名技能引用。 */
 export const gatewaySkillContentSchema = z.object({
   type: z.literal('skill'),
   name: opaqueStringSchema,
 }).strict()
 
-/** Content blocks accepted by the external message operation. */
+/** 外部消息操作接受的内容块。 */
 export const gatewayMessageContentSchema = z.discriminatedUnion('type', [
   gatewayTextContentSchema,
   gatewayImageContentSchema,
@@ -206,7 +206,7 @@ const sessionExportPayloadSchema = z.object({
   sessionId: sessionIdSchema,
 }).strict()
 
-/** Strict discriminated union for every mutation operation. */
+/** 所有变更操作的严格判别联合。 */
 export const gatewayPayloadSchema: z.ZodType<GatewayPayload> = z.discriminatedUnion('type', [
   sessionCreatePayloadSchema,
   sessionSelectPayloadSchema,
@@ -224,7 +224,7 @@ export const gatewayPayloadSchema: z.ZodType<GatewayPayload> = z.discriminatedUn
   sessionExportPayloadSchema,
 ]) as unknown as z.ZodType<GatewayPayload>
 
-/** Strict request body for `POST /v1/deliveries`. */
+/** `POST /v1/deliveries` 的严格请求体。 */
 export const gatewayDeliverySchema: z.ZodType<GatewayDelivery> = z.object({
   deliveryId: opaqueStringSchema,
   accountId: opaqueStringSchema,
@@ -232,7 +232,7 @@ export const gatewayDeliverySchema: z.ZodType<GatewayDelivery> = z.object({
   payload: gatewayPayloadSchema,
 }).strict() as unknown as z.ZodType<GatewayDelivery>
 
-/** Strict request body for `POST /v1/events/ack`. */
+/** `POST /v1/events/ack` 的严格请求体。 */
 export const gatewayAckSchema = z.object({
   upToSequence: safeIntegerSchema,
 }).strict()
@@ -240,7 +240,7 @@ export const gatewayAckSchema = z.object({
 const uploadDigestSchema = z.string().regex(/^[a-f0-9]{64}$/u)
 const uploadKindSchema = z.union([z.literal('image'), z.literal('file')])
 
-/** Strict metadata body for `POST /v1/uploads`. */
+/** `POST /v1/uploads` 的严格元数据请求体。 */
 export const gatewayUploadInitSchema: z.ZodType<GatewayUploadInitRequest> = z.object({
   accountId: opaqueStringSchema,
   peerId: opaqueStringSchema,
@@ -252,7 +252,7 @@ export const gatewayUploadInitSchema: z.ZodType<GatewayUploadInitRequest> = z.ob
   sha256: uploadDigestSchema.optional(),
 }).strict() as unknown as z.ZodType<GatewayUploadInitRequest>
 
-/** Strict optional checksum body for `POST /v1/uploads/:id/complete`. */
+/** `POST /v1/uploads/:id/complete` 的严格可选校验和请求体。 */
 export const gatewayUploadCompleteSchema: z.ZodType<GatewayUploadCompleteRequest> = z.object({
   sha256: uploadDigestSchema.optional(),
 }).strict() as unknown as z.ZodType<GatewayUploadCompleteRequest>
@@ -294,12 +294,12 @@ const eventPayloadSchemas = [
   z.object({ type: z.literal('turn-failed'), sessionId: sessionIdSchema, message: z.string().min(1).max(MAX_TEXT_LENGTH) }).strict(),
 ] as const
 
-/** Strict event payload schema for durable outbox rows. */
+/** 持久化 outbox 记录的严格事件载荷结构。 */
 export const gatewayEventPayloadSchema: z.ZodType<GatewayEventPayload> = z.discriminatedUnion(
   'type', eventPayloadSchemas,
 ) as unknown as z.ZodType<GatewayEventPayload>
 
-/** Strict durable inbox record schema. */
+/** 严格的持久化 inbox 记录结构。 */
 export const gatewayDeliveryRecordSchema: z.ZodType<GatewayDeliveryRecord> = z.object({
   deliveryId: opaqueStringSchema,
   accountId: opaqueStringSchema,
@@ -318,7 +318,7 @@ export const gatewayDeliveryRecordSchema: z.ZodType<GatewayDeliveryRecord> = z.o
   result: jsonValueSchema.optional(),
 }).strict() as unknown as z.ZodType<GatewayDeliveryRecord>
 
-/** Strict durable outbox event schema. */
+/** 严格的持久化 outbox 事件结构。 */
 export const gatewayEventSchema: z.ZodType<GatewayEvent> = z.object({
   clientId: opaqueStringSchema,
   sequence: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
@@ -331,14 +331,14 @@ export const gatewayEventSchema: z.ZodType<GatewayEvent> = z.object({
   createdAt: safeIntegerSchema,
 }).strict() as unknown as z.ZodType<GatewayEvent>
 
-/** Strict client sequence state schema. */
+/** 严格的客户端序号状态结构。 */
 export const gatewayClientStateSchema: z.ZodType<GatewayClientStateRecord> = z.object({
   clientId: opaqueStringSchema,
   nextSequence: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   acknowledgedSequence: safeIntegerSchema,
 }).strict() as unknown as z.ZodType<GatewayClientStateRecord>
 
-/** Strict Session ownership schema. */
+/** 严格的 Session 归属结构。 */
 export const gatewaySessionOwnershipSchema: z.ZodType<GatewaySessionOwnershipRecord> = z.object({
   clientId: opaqueStringSchema,
   accountId: opaqueStringSchema,
@@ -350,7 +350,7 @@ export const gatewaySessionOwnershipSchema: z.ZodType<GatewaySessionOwnershipRec
   active: z.boolean(),
 }).strict() as unknown as z.ZodType<GatewaySessionOwnershipRecord>
 
-/** Strict active conversation mapping schema. */
+/** 严格的活动对话映射结构。 */
 export const gatewayConversationSchema: z.ZodType<GatewayConversationRecord> = z.object({
   clientId: opaqueStringSchema,
   accountId: opaqueStringSchema,
@@ -359,7 +359,7 @@ export const gatewayConversationSchema: z.ZodType<GatewayConversationRecord> = z
   updatedAt: safeIntegerSchema,
 }).strict() as unknown as z.ZodType<GatewayConversationRecord>
 
-/** Strict interaction ownership schema. */
+/** 严格的交互归属结构。 */
 export const gatewayInteractionSchema: z.ZodType<GatewayInteractionRecord> = z.object({
   clientId: opaqueStringSchema,
   accountId: opaqueStringSchema,
@@ -371,13 +371,13 @@ export const gatewayInteractionSchema: z.ZodType<GatewayInteractionRecord> = z.o
   status: z.union([z.literal('pending'), z.literal('answered'), z.literal('expired')]),
 }).strict() as unknown as z.ZodType<GatewayInteractionRecord>
 
-/** Durable cursor for Session-log to gateway-outbox projection. */
+/** Session 日志到网关 outbox 投影的持久化游标。 */
 export const gatewayProjectionCursorSchema: z.ZodType<GatewayProjectionCursorRecord> = z.object({
   sessionId: sessionIdSchema,
   sequence: safeIntegerSchema,
 }).strict() as unknown as z.ZodType<GatewayProjectionCursorRecord>
 
-/** Durable peer ownership and file metadata for one export artifact. */
+/** 单个导出产物的持久化 peer 归属和文件元数据。 */
 export const gatewayArtifactSchema: z.ZodType<GatewayArtifactRecord> = z.object({
   clientId: opaqueStringSchema,
   accountId: opaqueStringSchema,
@@ -390,7 +390,7 @@ export const gatewayArtifactSchema: z.ZodType<GatewayArtifactRecord> = z.object(
   createdAt: safeIntegerSchema,
 }).strict() as unknown as z.ZodType<GatewayArtifactRecord>
 
-/** Strict durable resumable-upload metadata and part state. */
+/** 严格的持久化可恢复上传元数据及分块状态。 */
 export const gatewayUploadRecordSchema: z.ZodType<GatewayUploadRecord> = z.object({
   clientId: opaqueStringSchema,
   accountId: opaqueStringSchema,
@@ -416,7 +416,7 @@ export const gatewayUploadRecordSchema: z.ZodType<GatewayUploadRecord> = z.objec
   completedAt: safeIntegerSchema.optional(),
 }).strict() as unknown as z.ZodType<GatewayUploadRecord>
 
-/** Durable inbox/outbox domain schemas exported for tests and adapters. */
+/** 导出给测试和适配器使用的持久化 inbox/outbox domain 结构。 */
 export const gatewayRecordSchemas = {
   delivery: gatewayDeliveryRecordSchema,
   event: gatewayEventSchema,

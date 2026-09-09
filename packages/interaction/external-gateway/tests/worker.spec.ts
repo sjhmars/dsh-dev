@@ -8,6 +8,8 @@ import { externalGatewayDomainSpec, ExternalGatewayStore } from '../src/storage.
 import { ExternalGatewayWorker } from '../src/worker.ts'
 import type { ExternalGatewayRuntime, GatewayDelivery } from '../src/types.ts'
 import { SessionId } from '@deepseek-ai/dsh-session'
+import { ExternalGatewayHostRuntime } from '../src/host-runtime.ts'
+import { ApiSessionNotFound } from '@deepseek-ai/dsh-api-session-controller'
 
 const client = GatewayClientId('worker-client')
 const account = 'account'
@@ -51,6 +53,64 @@ function runtime(dispatch: ExternalGatewayRuntime['dispatch']): ExternalGatewayR
 }
 
 describe('ExternalGatewayWorker', () => {
+  it('creates a pending Host Session before the first message and reuses a failed reservation', async () => {
+    const harness = await openStore()
+    const locations = new Map<string, { cwd: string }>()
+    const order: string[] = []
+    let failCreation = true
+    const create = vi.fn(async (request: { sessionId: string; cwd: string }) => {
+      order.push('create')
+      if (failCreation) throw new Error('temporary creation failure')
+      locations.set(request.sessionId, { cwd: request.cwd })
+      return { sessionId: request.sessionId }
+    })
+    const prompt = vi.fn(async (request: { sessionId: string }) => {
+      order.push('prompt')
+      if (!locations.has(request.sessionId)) throw new ApiSessionNotFound('missing Host Session')
+      return { accepted: true }
+    })
+    // 真实 worker、归属存储和宿主适配器共用一次预留；
+    // 此处仅替换下游 Session 服务。
+    const ctx = {
+      sessionController: {
+        create, prompt,
+        inspect: async (id: string) => {
+          const meta = locations.get(id)
+          if (meta === undefined) throw new ApiSessionNotFound('missing Host Session')
+          return { meta, events: [] }
+        },
+      },
+      on: () => () => {},
+    } as unknown as Context
+    const runtime = new ExternalGatewayHostRuntime(ctx, harness.store, 'gateway-cwd', 600_000)
+    const worker = new ExternalGatewayWorker({ store: harness.store, runtime, startupCwd: 'gateway-cwd' })
+    const message = (id: string): GatewayDelivery => ({
+      ...createDelivery(id), payload: { type: 'message', content: [{ type: 'text', text: 'hello' }] },
+    })
+    try {
+      await harness.store.acceptDelivery(client, message('first'))
+      await worker.start()
+      await vi.waitFor(() => expect(harness.store.getDelivery(client, GatewayDeliveryId('first'))?.status).toBe('failed'))
+      expect(prompt).not.toHaveBeenCalled()
+      const reserved = harness.store.activeSession({ clientId: client, accountId: account, peerId: peer })!
+      failCreation = false
+      await harness.store.acceptDelivery(client, message('retry'))
+      await worker.resumePending()
+      await vi.waitFor(() => expect(harness.store.getDelivery(client, GatewayDeliveryId('retry'))?.status).toBe('completed'))
+      expect(create.mock.calls.map(([request]) => request.sessionId)).toEqual([reserved, reserved])
+      expect(order).toEqual(['create', 'create', 'prompt'])
+      await harness.store.acceptDelivery(client, message('next'))
+      await worker.resumePending()
+      await vi.waitFor(() => expect(harness.store.getDelivery(client, GatewayDeliveryId('next'))?.status).toBe('completed'))
+      expect(create).toHaveBeenCalledTimes(2)
+      expect(prompt).toHaveBeenCalledTimes(2)
+      expect(harness.store.listSessions({ clientId: client, accountId: account, peerId: peer })[0]?.status).toBe('ready')
+    } finally {
+      await worker.close()
+      await harness.close()
+    }
+  })
+
   it('replays Session events once and persists the projection cursor', async () => {
     const harness = await openStore()
     const event = {

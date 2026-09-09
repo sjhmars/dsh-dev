@@ -78,7 +78,7 @@ The `external_gateway` storage domain contains inbox deliveries, peer-owned Sess
 
 The worker serializes deliveries for one client/account/peer conversation and allows different conversations to run independently. A crash after the runtime accepts a mutation but before the inbox row is completed can repeat the mutation; this is intentional at-least-once behavior. The worker writes completion or failure events before changing the inbox state, so a completed delivery cannot hide its only result.
 
-Session creation reserves an explicit Session id in the inbox before the runtime creates it. A retry therefore reuses the same id after a partial write or process restart instead of minting an unrelated second Session.
+Session creation reserves an explicit Session id in the inbox before the runtime creates it. Messages and commands targeting a pending reservation create or recover the Host Session before inspecting or using it. A retry therefore reuses the same id after a partial write or process restart instead of minting an unrelated second Session.
 
 Allowlisted Session events are copied into the outbox with a durable per-Session cursor. Startup replays events after that cursor, so a crash between the Session log commit and the outbox write may duplicate a projection but does not silently lose it.
 

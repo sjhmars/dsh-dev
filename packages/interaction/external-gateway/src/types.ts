@@ -1,4 +1,4 @@
-/** Wire, storage, and Session-adapter types for the External Gateway. */
+/** External Gateway 的传输、存储和 Session 适配器类型。 */
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Duplex } from 'node:stream'
@@ -6,57 +6,57 @@ import type { Branded } from '@deepseek-ai/dsh-brand'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { AskUserQuestionIntent } from '@deepseek-ai/dsh-user-questions/types'
 
-/** Lossless JSON value accepted at the HTTP and storage boundaries. */
+/** HTTP 和存储边界接受的无损 JSON 值。 */
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue }
 
-/** Opaque identity minted or supplied by an external protocol client. */
+/** 外部协议客户端生成或提供的不透明标识符。 */
 export type GatewayClientId = Branded<'ExternalGatewayClientId'>
-/** Opaque identity assigned to one external delivery. */
+/** 分配给外部投递的不透明标识符。 */
 export type GatewayDeliveryId = Branded<'ExternalGatewayDeliveryId'>
-/** Opaque identity for a client-visible interaction. */
+/** 客户端可见交互的不透明标识符。 */
 export type GatewayInteractionId = Branded<'ExternalGatewayInteractionId'>
-/** Opaque identity for an outbox event. */
+/** outbox 事件的不透明标识符。 */
 export type GatewayEventId = Branded<'ExternalGatewayEventId'>
-/** Opaque identity assigned to one resumable binary upload. */
+/** 分配给可恢复二进制上传的不透明标识符。 */
 export type GatewayUploadId = Branded<'ExternalGatewayUploadId'>
 
-/** A text block in a message submitted through the gateway. */
+/** 通过网关提交的消息中的文本块。 */
 export interface GatewayTextContent {
   readonly type: 'text'
   readonly text: string
 }
 
-/** An encoded image admitted through the existing Session Controller. */
+/** 通过现有 Session Controller 接收的编码图片。 */
 export interface GatewayImageContent {
   readonly type: 'image'
-  /** Present for an inline image; omitted when `uploadId` names a completed upload. */
+  /** 内嵌图片时提供；`uploadId` 指向已完成上传时省略。 */
   readonly mediaType?: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
-  /** Canonical base64 image bytes for the inline form. */
+  /** 内嵌形式使用的规范 base64 图片字节。 */
   readonly data?: string
-  /** Completed image upload to resolve on the Host before prompt admission. */
+  /** 提示输入准入前由宿主解析的已完成图片上传。 */
   readonly uploadId?: GatewayUploadId
   readonly name?: string
 }
 
-/** A completed upload resolved by the Host into an image or safe file-path prompt. */
+/** 由宿主解析为图片或安全文件路径提示的已完成上传。 */
 export interface GatewayUploadContent {
   readonly type: 'upload'
   readonly uploadId: GatewayUploadId
 }
 
-/** Explicit file-upload spelling accepted as a message content block. */
+/** 消息内容块接受的显式文件上传形式。 */
 export interface GatewayFileContent {
   readonly type: 'file'
   readonly uploadId: GatewayUploadId
 }
 
-/** A named skill reference selected by an external client. */
+/** 外部客户端选择的具名技能引用。 */
 export interface GatewaySkillContent {
   readonly type: 'skill'
   readonly name: string
 }
 
-/** Content accepted in an ordinary Session message. */
+/** 普通 Session 消息接受的内容。 */
 export type GatewayMessageContent =
   | GatewayTextContent
   | GatewayImageContent
@@ -64,18 +64,18 @@ export type GatewayMessageContent =
   | GatewayFileContent
   | GatewaySkillContent
 
-/** Common fields carried by delivery payload variants. */
+/** 各投递载荷变体携带的公共字段。 */
 export interface GatewaySessionAddress {
   readonly accountId: string
   readonly peerId: string
 }
 
-/** Credential-derived identity used by storage and Session adapters. */
+/** 存储和 Session 适配器使用的、由凭据推导的身份。 */
 export interface GatewayPeerIdentity extends GatewaySessionAddress {
   readonly clientId: string
 }
 
-/** Create one gateway-owned, ungrouped Session. */
+/** 创建一个归网关所有的未分组 Session。 */
 export interface GatewaySessionCreatePayload {
   readonly type: 'session-create'
   readonly title?: string
@@ -83,91 +83,91 @@ export interface GatewaySessionCreatePayload {
   readonly permissionPreset?: string
 }
 
-/** Select one gateway-owned Session as active. */
+/** 将一个归网关所有的 Session 设为活动 Session。 */
 export interface GatewaySessionSelectPayload {
   readonly type: 'session-select'
   readonly sessionId: SessionId
 }
 
-/** Rename one gateway-owned Session. */
+/** 重命名一个归网关所有的 Session。 */
 export interface GatewaySessionRenamePayload {
   readonly type: 'session-rename'
   readonly sessionId: SessionId
   readonly title: string
 }
 
-/** Fork one gateway-owned Session. */
+/** 分叉一个归网关所有的 Session。 */
 export interface GatewaySessionForkPayload {
   readonly type: 'session-fork'
   readonly sessionId: SessionId
   readonly eventSeq?: number
 }
 
-/** Cancel one active Session turn. */
+/** 取消一个活动 Session 轮次。 */
 export interface GatewaySessionCancelPayload {
   readonly type: 'session-cancel'
   readonly sessionId?: SessionId
 }
 
-/** A provider/model route selected for one Session. */
+/** 为单个 Session 选择的提供方与模型路由。 */
 export interface GatewayModelSelection {
   readonly provider: string
   readonly model: string
   readonly reasoningEffort?: string
 }
 
-/** Select a model for one gateway-owned Session. */
+/** 为一个归网关所有的 Session 选择模型。 */
 export interface GatewayModelSelectPayload {
   readonly type: 'model-select'
   readonly sessionId: SessionId
   readonly selection: GatewayModelSelection
 }
 
-/** Select one existing sandbox and approval preset for a Session. */
+/** 为 Session 选择一个现有的沙箱和审批预设。 */
 export interface GatewayPermissionSelectPayload {
   readonly type: 'permission-select'
   readonly sessionId: SessionId
   readonly preset: string
 }
 
-/** Submit one message to the active or explicitly named Session. */
+/** 向活动或显式指定的 Session 提交消息。 */
 export interface GatewayMessagePayload {
   readonly type: 'message'
-  /** Gateway-reserved target when the message uses the active Session. */
+  /** 消息使用活动 Session 时由网关预留的目标。 */
   readonly sessionId?: SessionId
   readonly content: readonly GatewayMessageContent[]
   readonly mode?: 'queue' | 'steer'
 }
 
-/** Execute one session-level slash command without sending it to the model. */
+/** 执行一个会话级斜杠命令，不将其发送给模型。 */
 export interface GatewayCommandPayload {
   readonly type: 'command'
   readonly sessionId?: SessionId
   readonly command: string
 }
 
-/** Answer one pending question interaction. */
+/** 回答一个待决问题交互。 */
 export interface GatewayQuestionAnswerPayload {
   readonly type: 'question-answer'
   readonly interactionId: GatewayInteractionId
   readonly answers: readonly GatewayQuestionAnswer[]
 }
 
-/** One structured answer item for a question. */
+/** 问题的单个结构化回答项。 */
 export interface GatewayQuestionAnswer {
   readonly id: string
   readonly selected: readonly string[]
   readonly custom?: string
 }
 
-/** Answer one pending approval interaction. */
+/** 回答一个待决审批交互。 */
 export interface GatewayApprovalAnswerPayload {
   readonly type: 'approval-answer'
   readonly interactionId: GatewayInteractionId
   readonly outcome: 'allowed-once' | 'rejected'
 }
 
-/** Continue one gateway-owned subagent. */
+/** 继续一个归网关所有的子代理。 */
 export interface GatewaySubagentFollowupPayload {
   readonly type: 'subagent-followup'
   readonly sessionId: SessionId
@@ -175,20 +175,20 @@ export interface GatewaySubagentFollowupPayload {
   readonly content: readonly GatewayMessageContent[]
 }
 
-/** Interrupt one gateway-owned subagent. */
+/** 中断一个归网关所有的子代理。 */
 export interface GatewaySubagentInterruptPayload {
   readonly type: 'subagent-interrupt'
   readonly sessionId: SessionId
   readonly agentId: string
 }
 
-/** Request a durable export artifact for one Session. */
+/** 请求单个 Session 的持久化导出产物。 */
 export interface GatewaySessionExportPayload {
   readonly type: 'session-export'
   readonly sessionId: SessionId
 }
 
-/** Every mutation accepted by `/v1/deliveries`. */
+/** `/v1/deliveries` 接受的所有变更操作。 */
 export type GatewayPayload =
   | GatewaySessionCreatePayload
   | GatewaySessionSelectPayload
@@ -205,21 +205,21 @@ export type GatewayPayload =
   | GatewaySubagentInterruptPayload
   | GatewaySessionExportPayload
 
-/** One accepted mutation before it is placed in the durable inbox. */
+/** 已接受但尚未写入持久化 inbox 的单次变更。 */
 export interface GatewayDelivery extends GatewaySessionAddress {
   readonly deliveryId: GatewayDeliveryId
   readonly payload: GatewayPayload
 }
 
-/** Delivery lifecycle persisted by the gateway. */
+/** 网关持久化的投递生命周期。 */
 export type GatewayDeliveryStatus = 'pending' | 'completed' | 'failed'
 
-/** One durable inbox record. */
+/** 单条持久化 inbox 记录。 */
 export interface GatewayDeliveryRecord extends GatewayDelivery {
   readonly clientId: GatewayClientId
   readonly digest: string
   readonly status: GatewayDeliveryStatus
-  /** Session id reserved before an auto-create operation is dispatched. */
+  /** 调度自动创建操作前预留的 Session ID。 */
   readonly reservedSessionId?: SessionId
   readonly attempts: number
   readonly createdAt: number
@@ -230,7 +230,7 @@ export interface GatewayDeliveryRecord extends GatewayDelivery {
   readonly result?: JsonValue
 }
 
-/** Event names emitted through `/v1/events`. */
+/** 通过 `/v1/events` 发出的事件名称。 */
 export type GatewayEventType =
   | 'delivery-completed'
   | 'delivery-failed'
@@ -247,7 +247,7 @@ export type GatewayEventType =
   | 'artifact-ready'
   | 'turn-failed'
 
-/** A structured question offered to an external client. */
+/** 向外部客户端提供的结构化问题。 */
 export interface GatewayQuestion {
   readonly id: string
   readonly question: string
@@ -255,25 +255,25 @@ export interface GatewayQuestion {
   readonly header?: string
   readonly options?: readonly { readonly label: string; readonly description?: string }[]
   readonly multiSelect?: boolean
-  /** Presentation intent copied from the Host user-question request. */
+  /** 从宿主用户问题请求复制的展示意图。 */
   readonly intent?: AskUserQuestionIntent
 }
 
-/** Kind of data admitted by the resumable upload protocol. */
+/** 可恢复上传协议接受的数据类型。 */
 export type GatewayUploadKind = 'image' | 'file'
-/** Lifecycle of one gateway upload. */
+/** 单次网关上传的生命周期。 */
 export type GatewayUploadStatus = 'pending' | 'completed'
 
-/** One persisted binary upload part. */
+/** 单个已持久化的二进制上传分块。 */
 export interface GatewayUploadPartRecord {
   readonly partNumber: number
   readonly bytes: number
   readonly digest: string
-  /** Owner-private temporary path; never accepted from the wire. */
+  /** 所有者私有的临时路径；绝不从传输请求中接受。 */
   readonly path: string
 }
 
-/** Durable owner-scoped metadata and received-part state for one upload. */
+/** 单次上传按所有者隔离的持久化元数据和已接收分块状态。 */
 export interface GatewayUploadRecord extends GatewaySessionAddress {
   readonly clientId: GatewayClientId
   readonly uploadId: GatewayUploadId
@@ -285,7 +285,7 @@ export interface GatewayUploadRecord extends GatewaySessionAddress {
   readonly chunkSize: number
   readonly totalParts: number
   readonly parts: readonly GatewayUploadPartRecord[]
-  /** Owner-private completed path under the fixed gateway cwd. */
+  /** 固定网关 cwd 下所有者私有的已完成文件路径。 */
   readonly path: string
   readonly status: GatewayUploadStatus
   readonly createdAt: number
@@ -293,9 +293,9 @@ export interface GatewayUploadRecord extends GatewaySessionAddress {
   readonly completedAt?: number
 }
 
-/** Client metadata used to create or resume one upload. */
+/** 用于创建或恢复上传的客户端元数据。 */
 export interface GatewayUploadInitRequest extends GatewaySessionAddress {
-  /** Optional client-chosen id used for idempotent initiation retries. */
+  /** 客户端可选指定的 ID，用于初始化重试的幂等处理。 */
   readonly uploadId?: GatewayUploadId
   readonly kind: GatewayUploadKind
   readonly filename: string
@@ -304,12 +304,12 @@ export interface GatewayUploadInitRequest extends GatewaySessionAddress {
   readonly sha256?: string
 }
 
-/** Optional checksum supplied when committing an upload. */
+/** 提交上传时提供的可选校验和。 */
 export interface GatewayUploadCompleteRequest {
   readonly sha256?: string
 }
 
-/** Public metadata returned by upload endpoints. */
+/** 上传接口返回的公开元数据。 */
 export interface GatewayUploadReceipt {
   readonly uploadId: GatewayUploadId
   readonly status: GatewayUploadStatus
@@ -321,11 +321,11 @@ export interface GatewayUploadReceipt {
   readonly totalParts: number
   readonly receivedParts: readonly number[]
   readonly sha256?: string
-  /** Content block that can be embedded in a later `message` delivery. */
+  /** 可嵌入后续 `message` 投递的内容块。 */
   readonly content: GatewayUploadContent
 }
 
-/** Event payloads stored in the durable outbox. */
+/** 存储在持久化 outbox 中的事件载荷。 */
 export type GatewayEventPayload =
   | { readonly type: 'delivery-completed'; readonly deliveryId: GatewayDeliveryId; readonly result?: JsonValue }
   | { readonly type: 'delivery-failed'; readonly deliveryId: GatewayDeliveryId; readonly code: string; readonly message: string }
@@ -342,7 +342,7 @@ export type GatewayEventPayload =
   | { readonly type: 'artifact-ready'; readonly sessionId: SessionId; readonly artifactId: string }
   | { readonly type: 'turn-failed'; readonly sessionId: SessionId; readonly message: string }
 
-/** One outbox event returned to a client. */
+/** 返回给客户端的单个 outbox 事件。 */
 export interface GatewayEvent {
   readonly clientId: GatewayClientId
   readonly sequence: number
@@ -355,19 +355,19 @@ export interface GatewayEvent {
   readonly createdAt: number
 }
 
-/** Durable outbox record. */
+/** 持久化 outbox 记录。 */
 export interface GatewayOutboxRecord extends GatewayEvent {
   readonly acknowledged?: boolean
 }
 
-/** Sequence state for one authenticated client. */
+/** 单个已认证客户端的序号状态。 */
 export interface GatewayClientStateRecord {
   readonly clientId: GatewayClientId
   readonly nextSequence: number
   readonly acknowledgedSequence: number
 }
 
-/** Session ownership persisted by the gateway. */
+/** 网关持久化的 Session 归属。 */
 export interface GatewaySessionOwnershipRecord {
   readonly clientId: GatewayClientId
   readonly accountId: string
@@ -379,14 +379,14 @@ export interface GatewaySessionOwnershipRecord {
   readonly active: boolean
 }
 
-/** Active-session mapping for one client/account/peer conversation. */
+/** 单个客户端、账号和 peer 对话的活动 Session 映射。 */
 export interface GatewayConversationRecord extends GatewaySessionAddress {
   readonly clientId: GatewayClientId
   readonly sessionId?: SessionId
   readonly updatedAt: number
 }
 
-/** Persisted ownership and lifetime of a question or approval interaction. */
+/** 问题或审批交互的持久化归属和有效期。 */
 export interface GatewayInteractionRecord extends GatewaySessionAddress {
   readonly clientId: GatewayClientId
   readonly sessionId: SessionId
@@ -396,13 +396,13 @@ export interface GatewayInteractionRecord extends GatewaySessionAddress {
   readonly status: 'pending' | 'answered' | 'expired'
 }
 
-/** Last Session event durably copied into the gateway outbox. */
+/** 最后一个已持久化复制到网关 outbox 的 Session 事件。 */
 export interface GatewayProjectionCursorRecord {
   readonly sessionId: SessionId
   readonly sequence: number
 }
 
-/** Durable metadata for a peer-owned downloadable artifact. */
+/** 归 peer 所有的可下载产物的持久化元数据。 */
 export interface GatewayArtifactRecord extends GatewaySessionAddress {
   readonly clientId: GatewayClientId
   readonly artifactId: string
@@ -413,7 +413,7 @@ export interface GatewayArtifactRecord extends GatewaySessionAddress {
   readonly createdAt: number
 }
 
-/** One client declaration accepted by the gateway. */
+/** 网关接受的单个客户端声明。 */
 export interface GatewayClientConfig {
   readonly clientId: string
   readonly tokenFile: string
@@ -421,7 +421,7 @@ export interface GatewayClientConfig {
   readonly peerIds?: readonly string[]
 }
 
-/** Runtime policy loaded by the Cordis plugin. */
+/** Cordis 插件加载的运行时策略。 */
 export interface ExternalGatewayConfig {
   readonly tokenFile: string
   readonly artifactDirectory: string
@@ -440,23 +440,23 @@ export interface ExternalGatewayConfig {
   readonly startupCwd?: string
 }
 
-/** Runtime address and payload handed to a Session adapter. */
+/** 交给 Session 适配器的运行时地址和载荷。 */
 export interface ExternalGatewayDispatchRequest extends GatewaySessionAddress {
   readonly clientId: GatewayClientId
   readonly deliveryId: GatewayDeliveryId
   readonly payload: GatewayPayload
-  /** Reserved id for a create or auto-create message operation. */
+  /** 创建或消息自动创建操作使用的预留 ID。 */
   readonly reservedSessionId?: SessionId
   readonly cwd: string
 }
 
-/** Result of one adapter mutation. */
+/** 单次适配器变更的结果。 */
 export interface ExternalGatewayDispatchResult {
   readonly sessionId?: SessionId
   readonly result?: JsonValue
 }
 
-/** Query operation exposed by the unified external protocol. */
+/** 统一外部协议暴露的查询操作。 */
 export type ExternalGatewayQueryOperation =
   | 'sessions'
   | 'session'
@@ -466,7 +466,7 @@ export type ExternalGatewayQueryOperation =
   | 'subagents'
   | 'artifact'
 
-/** Read-only operation handed to the Session adapter. */
+/** 交给 Session 适配器的只读操作。 */
 export interface ExternalGatewayQueryRequest extends GatewaySessionAddress {
   readonly clientId: GatewayClientId
   readonly operation: ExternalGatewayQueryOperation
@@ -476,13 +476,13 @@ export interface ExternalGatewayQueryRequest extends GatewaySessionAddress {
   readonly limit?: number
 }
 
-/** JSON response from a query operation. */
+/** 查询操作的 JSON 响应。 */
 export interface ExternalGatewayJsonQueryResult {
   readonly kind: 'json'
   readonly value: JsonValue
 }
 
-/** Binary response from an artifact operation. */
+/** 产物操作的二进制响应。 */
 export interface ExternalGatewayBytesQueryResult {
   readonly kind: 'bytes'
   readonly contentType: string
@@ -490,34 +490,34 @@ export interface ExternalGatewayBytesQueryResult {
   readonly filename?: string
 }
 
-/** Result of a read-only operation. */
+/** 只读操作的结果。 */
 export type ExternalGatewayQueryResult = ExternalGatewayJsonQueryResult | ExternalGatewayBytesQueryResult
 
-/** Runtime event emitted after the Session adapter observes a gateway-owned Session. */
+/** Session 适配器观测到网关所属 Session 后发出的运行时事件。 */
 export interface ExternalGatewayRuntimeEvent extends GatewaySessionAddress {
   readonly clientId: GatewayClientId
   readonly sessionId: SessionId
   readonly payload: GatewayEventPayload
-  /** Durable Session event sequence used for crash-safe replay and deduplication. */
+  /** 用于崩溃安全重放和去重的持久化 Session 事件序号。 */
   readonly sourceSequence?: number
   readonly interaction?: Omit<GatewayInteractionRecord, 'status'>
 }
 
-/** Adapter implemented by the Session-runtime package. */
+/** 由 Session 运行时包实现的适配器。 */
 export interface ExternalGatewayRuntime {
-  /** Fixed cwd used for every new gateway-owned Session. */
+  /** 每个新建的网关所属 Session 使用的固定 cwd。 */
   readonly startupCwd: string
-  /** Execute one durable mutation against a gateway-owned Session. */
+  /** 对网关所属 Session 执行一次持久化变更。 */
   dispatch(request: ExternalGatewayDispatchRequest, signal: AbortSignal): Promise<ExternalGatewayDispatchResult>
-  /** Read one gateway-owned projection or artifact. */
+  /** 读取一个网关所属投影或产物。 */
   query(request: ExternalGatewayQueryRequest, signal: AbortSignal): Promise<ExternalGatewayQueryResult>
-  /** Subscribe to final replies, questions, approvals, and Session events. */
+  /** 订阅最终回复、问题、审批及 Session 事件。 */
   subscribe(listener: (event: ExternalGatewayRuntimeEvent) => Promise<void>): () => void
-  /** Replay durable Session events that have not reached the gateway outbox. */
+  /** 重放尚未到达网关 outbox 的持久化 Session 事件。 */
   replay(): Promise<void>
 }
 
-/** Route registration surface used by the HTTP carrier. */
+/** HTTP 传输层使用的路由注册接口。 */
 export interface GatewayHttpCarrier {
   register(route: {
     readonly kind: 'exact' | 'prefix'
@@ -530,7 +530,7 @@ export interface GatewayHttpCarrier {
   }): () => void
 }
 
-/** Public projection of one stored delivery accepted by the API. */
+/** API 接受的已存储投递的公开投影。 */
 export interface GatewayDeliveryReceipt {
   readonly deliveryId: GatewayDeliveryId
   readonly status: GatewayDeliveryStatus

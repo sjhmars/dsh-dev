@@ -1,10 +1,10 @@
 /**
- * Peer-scoped Session operations for the External Gateway protocol.
+ * External Gateway 协议中按 peer 隔离的 Session 操作。
  *
- * This module is deliberately a facade over the existing Host services. It
- * owns neither an Agent loop nor persistence. The gateway store supplies the
- * peer ownership and interaction records, while this facade supplies the
- * fixed working-directory and ungrouped-Session policy at every operation.
+ * 本模块仅封装现有宿主服务，
+ * 不拥有 Agent 循环或持久化实现。网关存储提供
+ * peer 归属及交互记录，本封装层则在
+ * 每项操作中落实固定工作目录和 Session 未分组策略。
  *
  * @module @deepseek-ai/dsh-external-gateway/session-runtime
  */
@@ -53,57 +53,57 @@ import type {
 } from '@deepseek-ai/dsh-subagent'
 import type { SessionRequestId, PromptContentPart } from '@deepseek-ai/dsh-api-session-controller/types'
 
-/** The caller identity selected by the gateway credential. */
+/** 网关凭据确定的调用方身份。 */
 export interface GatewayPeer {
-  /** Credential-derived client identity. */
+  /** 由凭据推导的客户端身份。 */
   readonly clientId: string
-  /** External account identity, for example one iLink account. */
+  /** 外部账号身份，例如一个 iLink 账号。 */
   readonly accountId: string
-  /** External peer identity, for example one WeChat user. */
+  /** 外部 peer 身份，例如一个微信用户。 */
   readonly peerId: string
 }
 
-/** A Session address owned by one external peer. */
+/** 归单个外部 peer 所有的 Session 地址。 */
 export interface GatewaySessionAddress {
   readonly peer: GatewayPeer
   readonly sessionId: SessionId
 }
 
-/** A value that may be synchronous in a unit-test adapter or asynchronous in a store adapter. */
+/** 在单元测试适配器中可同步返回、在存储适配器中可异步返回的值。 */
 export type MaybePromise<Value> = Value | Promise<Value>
 
 /**
- * Ownership callbacks supplied by the durable gateway store.
+ * 持久化网关存储提供的归属回调。
  *
- * `claimSession` is an atomic pre-creation reservation. It returns `true` when
- * this peer newly owns an unowned identity and `false` when the identity was
- * already owned by this peer. It must reject a claim belonging to another
- * peer. A successful claim is durable even when Host Session creation fails:
- * the same explicit Session ID is retried after restart instead of creating a
- * second conversation. The store therefore must not release a claim merely
- * because the first Host creation attempt failed.
+ * `claimSession` 在创建前原子预留标识符。当此 peer 新获得
+ * 一个无主标识符的归属时返回 `true`，当标识符
+ * 已属于此 peer 时返回 `false`。必须拒绝认领属于其他
+ * peer 的标识符。即使宿主 Session 创建失败，成功的归属认领仍会持久保留：
+ * 重启后使用同一个显式 Session ID 重试，而不是创建
+ * 第二段对话。因此，存储不能仅因
+ * 首次宿主创建尝试失败就释放归属。
  */
 export interface GatewaySessionOwnership {
-  /** Whether this peer owns the Session identity. */
+  /** 此 peer 是否拥有该 Session 标识符。 */
   readonly ownsSession: (peer: GatewayPeer, sessionId: SessionId) => MaybePromise<boolean>
-  /** Atomically reserve or adopt an unowned Session identity for this peer. */
+  /** 为此 peer 原子预留或认领一个无主 Session 标识符。 */
   readonly claimSession: (peer: GatewayPeer, sessionId: SessionId) => MaybePromise<boolean>
-  /** Read this peer's active Session, if one has been selected. */
+  /** 读取此 peer 已选择的活动 Session（若有）。 */
   readonly activeSession: (peer: GatewayPeer) => MaybePromise<SessionId | undefined>
-  /** Persist this peer's active Session selection. */
+  /** 持久化此 peer 的活动 Session 选择。 */
   readonly setActiveSession: (peer: GatewayPeer, sessionId: SessionId | undefined) => MaybePromise<void>
   /**
-   * Optional location invariant. The default is ungrouped because this facade
-   * never sends a workspace id to the Session Controller.
+   * 可选的位置不变量。默认要求未分组，因为本封装层
+   * 绝不向 Session Controller 发送工作区 ID。
    */
   readonly isUngrouped?: (peer: GatewayPeer, sessionId: SessionId) => MaybePromise<boolean>
-  /** Whether a subagent child belongs to the peer's parent Session. */
+  /** 子代理是否属于此 peer 的父 Session。 */
   readonly ownsSubagent?: (
     peer: GatewayPeer,
     parentSessionId: SessionId,
     childSessionId: SessionId,
   ) => MaybePromise<boolean>
-  /** Whether an interaction id is still owned by this peer and Session. */
+  /** 交互 ID 是否仍归此 peer 和 Session 所有。 */
   readonly ownsInteraction?: (
     peer: GatewayPeer,
     sessionId: SessionId,
@@ -112,7 +112,7 @@ export interface GatewaySessionOwnership {
   ) => MaybePromise<boolean>
 }
 
-/** Existing Host methods consumed by the facade. */
+/** 封装层使用的现有宿主方法。 */
 export interface GatewaySessionServices {
   readonly sessionController: Pick<
     SessionController,
@@ -125,41 +125,41 @@ export interface GatewaySessionServices {
     SubagentRuntime,
     'remoteExportList' | 'prompt' | 'interruptByParent'
   >
-  /** Optional Agent-root predicate supplied by the Host's Agent registry. */
+  /** 宿主 Agent 注册表提供的可选根 Agent 判定函数。 */
   readonly isRootAgent?: (agent: Agent) => MaybePromise<boolean>
 }
 
 type ResolvedGatewayAgent = Awaited<ReturnType<SessionController['resolveAgent']>>
 
-/** A mutation's Session identity, before the active-peer fallback is applied. */
+/** 应用 peer 活动 Session 回退规则前，变更请求中的 Session 标识符。 */
 export interface GatewaySessionTarget {
   readonly sessionId?: SessionId
 }
 
-/** Gateway-safe Session creation request. Location fields are deliberately absent. */
+/** 网关安全的 Session 创建请求，明确不含位置字段。 */
 export interface GatewaySessionCreateRequest {
   readonly sessionId?: SessionId
   readonly agentPreset?: string
 }
 
-/** Gateway-safe Session selection request. */
+/** 网关安全的 Session 选择请求。 */
 export interface GatewaySessionSelectRequest {
   readonly sessionId: SessionId
 }
 
-/** Gateway-safe Session rename request. */
+/** 网关安全的 Session 重命名请求。 */
 export interface GatewaySessionRenameRequest {
   readonly sessionId: SessionId
   readonly title: string
 }
 
-/** Gateway-safe Session fork request. */
+/** 网关安全的 Session 分叉请求。 */
 export interface GatewaySessionForkRequest {
   readonly sessionId: SessionId
   readonly atSeq?: number
 }
 
-/** Gateway-safe model-selection request. */
+/** 网关安全的模型选择请求。 */
 export interface GatewaySessionModelRequest {
   readonly sessionId: SessionId
   readonly provider: string
@@ -167,28 +167,28 @@ export interface GatewaySessionModelRequest {
   readonly reasoningEffort?: string
 }
 
-/** Gateway-safe permission-preset request. */
+/** 网关安全的权限预设请求。 */
 export interface GatewaySessionPermissionRequest {
   readonly sessionId: SessionId
   readonly preset: string
 }
 
-/** Gateway-safe prompt request. */
+/** 网关安全的提示输入请求。 */
 export interface GatewaySessionMessageRequest extends GatewaySessionTarget {
-  /** Client-minted durable prompt correlation id. */
+  /** 客户端生成的持久化提示输入关联 ID。 */
   readonly requestId: SessionRequestId
   readonly mode?: 'queue' | 'steer'
   readonly content: readonly PromptContentPart[]
   readonly clientTimeZone?: string
 }
 
-/** Gateway-safe human-command request. */
+/** 网关安全的用户命令请求。 */
 export interface GatewaySessionCommandRequest extends GatewaySessionTarget {
   readonly line: string
   readonly images?: readonly EncodedImageAttachment[]
 }
 
-/** Gateway-safe continuable-subagent follow-up request. */
+/** 网关安全的可继续子代理跟进请求。 */
 export interface GatewaySubagentFollowupRequest {
   readonly parentSessionId: SessionId
   readonly childSessionId: SessionId
@@ -197,42 +197,42 @@ export interface GatewaySubagentFollowupRequest {
   readonly clientTimeZone?: string
 }
 
-/** Gateway-safe continuable-subagent interrupt request. */
+/** 网关安全的可继续子代理中断请求。 */
 export interface GatewaySubagentInterruptRequest {
   readonly parentSessionId: SessionId
   readonly childSessionId: SessionId
 }
 
-/** The two externally answerable interaction families. */
+/** 允许外部回答的两类交互。 */
 export type GatewayInteractionKind = 'question' | 'approval'
 
-/** A question answer paired with its gateway interaction id. */
+/** 与网关交互 ID 配对的问题回答。 */
 export interface GatewayQuestionAnswerRequest {
   readonly sessionId: SessionId
   readonly interactionId: string
   readonly answer: AskUserQuestionAnswer
 }
 
-/** An approval answer paired with its gateway interaction id. */
+/** 与网关交互 ID 配对的审批回答。 */
 export interface GatewayApprovalAnswerRequest {
   readonly sessionId: SessionId
   readonly interactionId: ApprovalRequestId | string
   readonly outcome: Extract<ApprovalOutcome, 'allowed-once' | 'rejected'>
 }
 
-/** The result of selecting one peer-owned Session. */
+/** 选择 peer 所属 Session 的结果。 */
 export interface GatewaySessionSelectValue {
   readonly sessionId: SessionId
   readonly active: true
 }
 
-/** The result of changing a Session permission preset. */
+/** 更改 Session 权限预设的结果。 */
 export interface GatewaySessionPermissionValue {
   readonly sessionId: SessionId
   readonly preset: string
 }
 
-/** Runtime failures mapped by the HTTP protocol layer. */
+/** 由 HTTP 协议层映射的运行时错误。 */
 export type GatewaySessionErrorCode =
   | 'session-not-owned'
   | 'session-location-invalid'
@@ -244,17 +244,17 @@ export type GatewaySessionErrorCode =
   | 'command-not-allowed'
   | 'invalid-location'
 
-/** Stable failure raised by the Session facade before a Host mutation. */
+/** Session 封装层在宿主变更前抛出的稳定错误。 */
 export class GatewaySessionRuntimeError extends Error {
-  /** Machine-readable failure category. */
+  /** 机器可读的错误类别。 */
   readonly code: GatewaySessionErrorCode
-  /** Structured details safe for the protocol's error envelope. */
+  /** 可安全放入协议错误封装的结构化详情。 */
   readonly details: Readonly<Record<string, unknown>>
 
   /**
-   * @param code - stable failure category.
-   * @param message - caller-facing diagnostic.
-   * @param details - structured, non-secret failure facts.
+   * @param code - 稳定的错误类别。
+   * @param message - 面向调用方的诊断信息。
+   * @param details - 不含秘密信息的结构化错误事实。
    */
   constructor(
     code: GatewaySessionErrorCode,
@@ -268,7 +268,7 @@ export class GatewaySessionRuntimeError extends Error {
   }
 }
 
-/** Default command denylist for host-management surfaces. */
+/** 宿主管理操作的默认命令拒绝列表。 */
 export const DEFAULT_GATEWAY_DENIED_COMMANDS: readonly string[] = Object.freeze([
   'credentials',
   'settings',
@@ -278,21 +278,21 @@ export const DEFAULT_GATEWAY_DENIED_COMMANDS: readonly string[] = Object.freeze(
   'agent-preset',
 ])
 
-/** Constructor options for {@link GatewaySessionRuntime}. */
+/** {@link GatewaySessionRuntime} 的构造选项。 */
 export interface GatewaySessionRuntimeOptions {
-  /** Existing Host capability services. */
+  /** 现有宿主能力服务。 */
   readonly services: GatewaySessionServices
-  /** Durable peer ownership and active-Session callbacks. */
+  /** 持久化 peer 归属和活动 Session 回调。 */
   readonly ownership: GatewaySessionOwnership
-  /** Absolute directory fixed into every gateway Session. */
+  /** 每个网关 Session 固定使用的绝对目录。 */
   readonly fixedCwd: string
-  /** Host command names that the external protocol must never execute. */
+  /** 外部协议绝不能执行的宿主命令名称。 */
   readonly deniedCommands?: readonly string[]
 }
 
 /**
- * Peer-owned facade over the existing Session, command, permission, skill and
- * subagent services.
+ * 按 peer 归属隔离的封装层，复用现有 Session、命令、权限、技能和
+ * 子代理服务。
  */
 export class GatewaySessionRuntime {
   private readonly services: GatewaySessionServices
@@ -301,7 +301,7 @@ export class GatewaySessionRuntime {
   private readonly deniedCommands: ReadonlySet<string>
 
   /**
-   * @param options - Host service adapters, ownership store, and fixed cwd.
+   * @param options - 宿主服务适配器、归属存储和固定 cwd。
    */
   constructor(options: GatewaySessionRuntimeOptions) {
     if (options.fixedCwd.trim().length === 0) {
@@ -313,20 +313,20 @@ export class GatewaySessionRuntime {
     this.deniedCommands = new Set(options.deniedCommands ?? DEFAULT_GATEWAY_DENIED_COMMANDS)
   }
 
-  /** The absolute cwd applied to every created or forked gateway Session. */
+  /** 每个新建或分叉的网关 Session 使用的绝对 cwd。 */
   get cwd(): string {
     return this.fixedCwd
   }
 
   /**
-   * Create or adopt one peer-owned, ungrouped Session and make it active.
+   * 创建或接管一个属于当前 peer 的未分组 Session，并将其设为活动 Session。
    *
-   * The request is checked again as an unknown wire value so a caller cannot
-   * bypass the TypeScript omission of `cwd` or `workspaceId`.
+   * 请求会再次作为未知的传输数据进行校验，防止调用方
+   * 绕过 TypeScript 对 `cwd` 或 `workspaceId` 的字段排除。
    *
-   * @param peer - credential-derived peer identity.
-   * @param request - gateway-safe creation request.
-   * @returns the existing Session Controller creation receipt.
+   * @param peer - 由凭据推导的 peer 身份。
+   * @param request - 网关安全的创建请求。
+   * @returns 现有 Session Controller 的创建回执。
    */
   async create(peer: GatewayPeer, request: GatewaySessionCreateRequest): Promise<SessionCreateValue> {
     this.assertNoLocationFields(request)
@@ -354,10 +354,10 @@ export class GatewaySessionRuntime {
   }
 
   /**
-   * Select one existing peer-owned Session as active.
-   * @param peer - credential-derived peer identity.
-   * @param request - Session to select.
-   * @returns the active selection receipt.
+   * 将一个已存在且属于当前 peer 的 Session 设为活动 Session。
+   * @param peer - 由凭据推导的 peer 身份。
+   * @param request - 待选择的 Session。
+   * @returns 活动 Session 选择回执。
    */
   async select(peer: GatewayPeer, request: GatewaySessionSelectRequest): Promise<GatewaySessionSelectValue> {
     await this.assertOwnedLocation(peer, request.sessionId)
@@ -366,10 +366,10 @@ export class GatewaySessionRuntime {
   }
 
   /**
-   * Rename one peer-owned Session.
-   * @param peer - credential-derived peer identity.
-   * @param request - Session and title.
-   * @returns the Host rename receipt.
+   * 重命名一个属于当前 peer 的 Session。
+   * @param peer - 由凭据推导的 peer 身份。
+   * @param request - Session 和标题。
+   * @returns 宿主重命名回执。
    */
   async rename(peer: GatewayPeer, request: GatewaySessionRenameRequest): Promise<SessionRenameValue> {
     await this.assertOwnedLocation(peer, request.sessionId)
@@ -377,11 +377,11 @@ export class GatewaySessionRuntime {
   }
 
   /**
-   * Fork one peer-owned Session while preserving the fixed cwd and ungrouped
-   * location.
-   * @param peer - credential-derived peer identity.
-   * @param request - source Session and optional completed-turn anchor.
-   * @returns the newly claimed child Session identity.
+   * 分叉一个属于当前 peer 的 Session，同时保留固定 cwd 和未分组的
+   * 位置状态。
+   * @param peer - 由凭据推导的 peer 身份。
+   * @param request - 来源 Session 及可选的已完成轮次锚点。
+   * @returns 新认领的子 Session 标识符。
    */
   async fork(peer: GatewayPeer, request: GatewaySessionForkRequest): Promise<SessionForkValue> {
     await this.assertOwnedLocation(peer, request.sessionId)
@@ -400,10 +400,10 @@ export class GatewaySessionRuntime {
   }
 
   /**
-   * Cancel one peer-owned Session's active turn.
-   * @param peer - credential-derived peer identity.
-   * @param sessionId - Session to cancel.
-   * @returns the Host cancellation receipt.
+   * 取消当前 peer 所属 Session 的活动轮次。
+   * @param peer - 由凭据推导的 peer 身份。
+   * @param sessionId - 待取消的 Session。
+   * @returns 宿主取消回执。
    */
   async cancel(peer: GatewayPeer, sessionId: SessionId): Promise<SessionCancelValue> {
     await this.assertOwnedLocation(peer, sessionId)
@@ -411,10 +411,10 @@ export class GatewaySessionRuntime {
   }
 
   /**
-   * Select a model for one peer-owned Session.
-   * @param peer - credential-derived peer identity.
-   * @param request - Session and model route.
-   * @returns the normalized Host model selection.
+   * 为当前 peer 所属 Session 选择模型。
+   * @param peer - 由凭据推导的 peer 身份。
+   * @param request - Session 和模型路由。
+   * @returns 规范化的宿主模型选择结果。
    */
   async selectModel(peer: GatewayPeer, request: GatewaySessionModelRequest): Promise<SessionSelectModelValue> {
     await this.assertOwnedLocation(peer, request.sessionId)
@@ -422,11 +422,11 @@ export class GatewaySessionRuntime {
   }
 
   /**
-   * Set the Session-local sandbox and approval preset through its canonical
-   * permission service.
-   * @param peer - credential-derived peer identity.
-   * @param request - Session and preset name.
-   * @returns the accepted preset.
+   * 通过正式权限服务设置 Session 局部的
+   * 沙箱和审批预设。
+   * @param peer - 由凭据推导的 peer 身份。
+   * @param request - Session 和预设名称。
+   * @returns 已接受的预设。
    */
   async setPermission(
     peer: GatewayPeer,
@@ -438,12 +438,12 @@ export class GatewaySessionRuntime {
   }
 
   /**
-   * Deliver one ordinary message to a selected or explicitly addressed
-   * Session. When no active Session exists, one is created at the fixed cwd.
-   * @param peer - credential-derived peer identity.
-   * @param request - prompt identity, content, and optional Session.
-   * @param signal - caller cancellation before prompt admission.
-   * @returns the Host prompt receipt.
+   * 向已选择或显式指定的 Session 投递一条
+   * 普通消息；不存在活动 Session 时，在固定 cwd 下创建。
+   * @param peer - 由凭据推导的 peer 身份。
+   * @param request - 提示输入标识符、内容及可选 Session。
+   * @param signal - 提示输入准入前的调用方取消信号。
+   * @returns 宿主提示输入回执。
    */
   async message(
     peer: GatewayPeer,
@@ -462,12 +462,12 @@ export class GatewaySessionRuntime {
   }
 
   /**
-   * Execute one registered Session command without opening a model turn.
-   * Host-management command names are denied before the command registry runs.
-   * @param peer - credential-derived peer identity.
-   * @param request - optional active Session, command line and image inputs.
-   * @param signal - command admission and handler lifetime.
-   * @returns the normalized command execution, or undefined for an unknown command.
+   * 执行一个已注册的 Session 命令，不开启模型轮次。
+   * 命令注册表执行前拒绝宿主管理命令名称。
+   * @param peer - 由凭据推导的 peer 身份。
+   * @param request - 可选的活动 Session、命令行和图片输入。
+   * @param signal - 命令准入及处理器生命周期信号。
+   * @returns 规范化的命令执行结果；未知命令返回 undefined。
    */
   async command(
     peer: GatewayPeer,
@@ -495,11 +495,11 @@ export class GatewaySessionRuntime {
   }
 
   /**
-   * List user-invocable skills for one peer-owned Session.
-   * @param peer - credential-derived peer identity.
-   * @param sessionId - Session whose preset and cwd determine the catalog.
-   * @param signal - catalog read cancellation.
-   * @returns the existing Session skill catalog value.
+   * 列出当前 peer 所属 Session 中用户可调用的技能。
+   * @param peer - 由凭据推导的 peer 身份。
+   * @param sessionId - 其预设和 cwd 决定技能目录的 Session。
+   * @param signal - 目录读取取消信号。
+   * @returns 现有 Session 技能目录值。
    */
   async listSkills(peer: GatewayPeer, sessionId: SessionId, signal: AbortSignal): Promise<SkillListValue> {
     await this.assertOwnedLocation(peer, sessionId)
@@ -507,11 +507,11 @@ export class GatewaySessionRuntime {
   }
 
   /**
-   * List direct subagents belonging to one peer-owned root Session.
-   * @param peer - credential-derived peer identity.
-   * @param parentSessionId - owned root Session.
-   * @param signal - catalog read cancellation.
-   * @returns the existing subagent catalog.
+   * 列出当前 peer 所属根 Session 的直接子代理。
+   * @param peer - 由凭据推导的 peer 身份。
+   * @param parentSessionId - 当前 peer 拥有的根 Session。
+   * @param signal - 目录读取取消信号。
+   * @returns 现有子代理目录。
    */
   async listSubagents(
     peer: GatewayPeer,
@@ -523,11 +523,11 @@ export class GatewaySessionRuntime {
   }
 
   /**
-   * Deliver a follow-up to one peer-owned continuable subagent.
-   * @param peer - credential-derived peer identity.
-   * @param request - parent/child address and user content.
-   * @param signal - caller cancellation before inbox acceptance.
-   * @returns the existing subagent prompt receipt.
+   * 向当前 peer 所属的可继续子代理投递跟进消息。
+   * @param peer - 由凭据推导的 peer 身份。
+   * @param request - 父子地址和用户内容。
+   * @param signal - inbox 接收前的调用方取消信号。
+   * @returns 现有子代理提示输入回执。
    */
   async followupSubagent(
     peer: GatewayPeer,
@@ -548,10 +548,10 @@ export class GatewaySessionRuntime {
   }
 
   /**
-   * Interrupt one peer-owned continuable subagent.
-   * @param peer - credential-derived peer identity.
-   * @param request - parent/child address.
-   * @returns the existing interrupt receipt.
+   * 中断当前 peer 所属的可继续子代理。
+   * @param peer - 由凭据推导的 peer 身份。
+   * @param request - 父子地址。
+   * @returns 现有中断回执。
    */
   async interruptSubagent(
     peer: GatewayPeer,
@@ -567,32 +567,32 @@ export class GatewaySessionRuntime {
   }
 
   /**
-   * Check that an externally supplied question answer addresses a live
-   * interaction owned by this peer and Session.
-   * @param peer - credential-derived peer identity.
-   * @param request - Session and interaction identity.
+   * 检查外部提供的问题回答是否指向仍有效的、
+   * 归此 peer 和 Session 所有的交互。
+   * @param peer - 由凭据推导的 peer 身份。
+   * @param request - Session 和交互标识符。
    */
   async assertQuestionScope(peer: GatewayPeer, request: GatewayQuestionAnswerRequest): Promise<void> {
     await this.assertInteractionScope(peer, request.sessionId, request.interactionId, 'question')
   }
 
   /**
-   * Check that an externally supplied approval answer addresses a live
-   * interaction owned by this peer and Session.
-   * @param peer - credential-derived peer identity.
-   * @param request - Session and interaction identity.
+   * 检查外部提供的审批回答是否指向仍有效的、
+   * 归此 peer 和 Session 所有的交互。
+   * @param peer - 由凭据推导的 peer 身份。
+   * @param request - Session 和交互标识符。
    */
   async assertApprovalScope(peer: GatewayPeer, request: GatewayApprovalAnswerRequest): Promise<void> {
     await this.assertInteractionScope(peer, request.sessionId, String(request.interactionId), 'approval')
   }
 
   /**
-   * Return whether an Agent may be used for this gateway's root interaction
-   * answerer. Subagent Agents are never valid question/approval owners.
-   * @param peer - credential-derived peer identity.
-   * @param sessionId - peer-owned root Session.
-   * @param agent - exact live Agent observed by the event listener.
-   * @returns true only for the exact owned root Agent.
+   * 返回 Agent 能否作为此网关的根交互
+   * 回答方；子代理 Agent 绝不能成为问题或审批的有效所有者。
+   * @param peer - 由凭据推导的 peer 身份。
+   * @param sessionId - 当前 peer 拥有的根 Session。
+   * @param agent - 事件监听器观测到的确切活动 Agent。
+   * @returns 仅当 Agent 正是当前 peer 拥有的根 Agent 时返回 true。
    */
   async ownsRootInteractionAgent(peer: GatewayPeer, sessionId: SessionId, agent: Agent): Promise<boolean> {
     if (!(await this.ownership.ownsSession(peer, sessionId))) return false
@@ -601,7 +601,7 @@ export class GatewaySessionRuntime {
     return agent.session.header.origin !== 'subagent'
   }
 
-  /** Resolve a peer's active Session or create one for an ordinary message. */
+  /** 解析 peer 的活动 Session，或为普通消息创建 Session。 */
   private async targetSession(peer: GatewayPeer, requested?: SessionId): Promise<SessionId> {
     if (requested !== undefined) {
       await this.assertOwnedLocation(peer, requested)
@@ -616,7 +616,7 @@ export class GatewaySessionRuntime {
     return created.sessionId
   }
 
-  /** Reject an explicit identity that already has a Host Session behind it. */
+  /** 拒绝已经关联宿主 Session 的显式标识符。 */
   private async assertUnbackedSession(sessionId: SessionId): Promise<void> {
     try {
       await this.services.sessionController.inspect(sessionId)
@@ -631,7 +631,7 @@ export class GatewaySessionRuntime {
     )
   }
 
-  /** Resolve an owned ordinary Session to its live Agent. */
+  /** 将已拥有的普通 Session 解析为其活动 Agent。 */
   private async resolveOwnedAgent(peer: GatewayPeer, sessionId: SessionId): Promise<Agent> {
     await this.assertOwnedLocation(peer, sessionId)
     const found: ResolvedGatewayAgent = await this.services.sessionController.resolveAgent(sessionId)
@@ -646,7 +646,7 @@ export class GatewaySessionRuntime {
     return found.agent
   }
 
-  /** Verify peer ownership and the fixed location invariant. */
+  /** 校验 peer 归属和固定位置不变量。 */
   private async assertOwnedLocation(peer: GatewayPeer, sessionId: SessionId): Promise<void> {
     if (!(await this.ownership.ownsSession(peer, sessionId))) {
       throw new GatewaySessionRuntimeError(
@@ -658,7 +658,7 @@ export class GatewaySessionRuntime {
     await this.assertLocation(peer, sessionId)
   }
 
-  /** Verify cwd and optional ungrouped ownership metadata. */
+  /** 校验 cwd 及可选的未分组归属元数据。 */
   private async assertLocation(peer: GatewayPeer, sessionId: SessionId): Promise<void> {
     const observation = await this.services.sessionController.inspect(sessionId)
     if (observation.meta.cwd !== this.fixedCwd) {
@@ -678,7 +678,7 @@ export class GatewaySessionRuntime {
     }
   }
 
-  /** Verify an interaction record before the protocol accepts its answer. */
+  /** 协议接受回答前校验交互记录。 */
   private async assertInteractionScope(
     peer: GatewayPeer,
     sessionId: SessionId,
@@ -703,7 +703,7 @@ export class GatewaySessionRuntime {
     }
   }
 
-  /** Verify a child Session's peer-owned parent relationship. */
+  /** 校验子 Session 与 peer 所属父 Session 的关系。 */
   private async assertOwnedSubagent(
     peer: GatewayPeer,
     parentSessionId: SessionId,
@@ -723,7 +723,7 @@ export class GatewaySessionRuntime {
     )
   }
 
-  /** Reject forbidden location fields even when called through an untyped adapter. */
+  /** 即使通过无类型适配器调用，也拒绝禁止的位置字段。 */
   private assertNoLocationFields(request: object): void {
     const value = request as Record<string, unknown>
     if ('cwd' in value || 'workspaceId' in value) {
