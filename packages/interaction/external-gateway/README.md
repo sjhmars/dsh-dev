@@ -55,6 +55,10 @@ The protocol authority is [PROTOCOL.md](PROTOCOL.md). Clients must use the same 
 | `maxUploadBytes` | `100 MiB` | Maximum completed file upload size. |
 | `maxImageBytes` | `20 MiB` | Maximum completed image upload size. |
 
+Console diagnostics are enabled by default. Startup prints the listener, cwd, and token file path; owned Sessions print turn and model-step progress, completion reasons, and provider failures to stderr. Delivery failures are also logged. The logger omits message bodies and tool arguments, masks common credential patterns and URLs, and does not print error stacks or arbitrary error objects. Provider error text can still contain sensitive information; review logs before sharing them.
+
+`consoleLogs: false` disables this console output. `consoleLogMaxChars` defaults to `2000` and bounds each log body. These plugin configuration fields do not change the HTTP protocol or Session persistence.
+
 The bundle, not this plugin, fixes the isolated WebServer at `127.0.0.1:18765`. The profile supplies the fixed startup cwd. It is recorded for ownership checks and is not accepted in a request body.
 
 <a id="protocol"></a>

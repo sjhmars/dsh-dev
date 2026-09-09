@@ -16,6 +16,7 @@ import { loadOrCreateGatewayToken } from './token.ts'
 import { ExternalGatewayWorker } from './worker.ts'
 import type { ExternalGatewayConfig } from './types.ts'
 import { ExternalGatewayHostRuntime } from './host-runtime.ts'
+import { installGatewayConsole, observeGatewayExecution } from './console.ts'
 import { MAX_GATEWAY_IMAGE_BYTES, MAX_GATEWAY_UPLOAD_BYTES } from './schema.ts'
 
 export type * from './types.ts'
@@ -77,7 +78,14 @@ declare module '@deepseek-ai/cordis' {
 }
 
 /** External Gateway 服务配置。 */
-export type Config = Omit<ExternalGatewayConfig, 'startupCwd'> & { readonly startupCwd: string }
+export type Config = Omit<ExternalGatewayConfig, 'startupCwd'> & {
+  /** 网关 Session 固定使用的启动目录。 */
+  readonly startupCwd: string
+  /** 是否将网关运行摘要输出到 stderr。 */
+  readonly consoleLogs: boolean
+  /** 每条控制台日志正文的最大字符数。 */
+  readonly consoleLogMaxChars: number
+}
 
 const DEFAULT_MAX_BODY_BYTES = 2_000_000
 const DEFAULT_MAX_TEXT_BYTES = 1_000_000
@@ -113,6 +121,8 @@ export class ExternalGatewayService extends Service {
 
   /** 已校验的部署配置。 */
   static Config: z<Config> = z.object({
+    consoleLogs: z.boolean().default(true),
+    consoleLogMaxChars: z.natural().min(1).default(2000),
     tokenFile: z.string().min(1).default(DEFAULT_TOKEN_FILE),
     artifactDirectory: z.string().min(1).default(DEFAULT_ARTIFACT_DIRECTORY),
     clientId: z.string().min(1).default('weixin-mouth'),
@@ -154,8 +164,16 @@ export class ExternalGatewayService extends Service {
 
   /** 持久化 domain 和宿主适配器就绪后启动协议路由。 */
   protected async [Service.init](): Promise<void> {
+    const logger = installGatewayConsole(this.ctx, {
+      enabled: this.config.consoleLogs,
+      maxChars: positiveSafeInteger(this.config.consoleLogMaxChars, 'consoleLogMaxChars'),
+    })
+    logger.info('正在初始化网关')
     const startupCwd = resolve(this.config.startupCwd)
-    const domain = await this.ctx.storageDomain.open(externalGatewayDomainSpec)
+    const domain = await this.ctx.storageDomain.open(externalGatewayDomainSpec).catch((error: unknown) => {
+      logger.error('网关存储初始化失败', error)
+      throw error
+    })
     try {
       const store = new ExternalGatewayStore({
         domain,
@@ -172,12 +190,13 @@ export class ExternalGatewayService extends Service {
         startupCwd,
         positiveSafeInteger(this.config.interactionTimeoutMs, 'interactionTimeoutMs'),
       )
+      observeGatewayExecution(this.ctx, id => store.ownerOfSession(id) !== undefined, logger)
       const token = await loadOrCreateGatewayToken(this.config.tokenFile)
       const worker = new ExternalGatewayWorker({
         store,
         runtime,
         startupCwd,
-        onError: error => this.ctx.logger.error(error instanceof Error ? error : new Error(String(error))),
+        onError: (error) => { logger.error('网关后台任务失败', error) },
       })
       const http = new ExternalGatewayHttp({
         carrier: this.ctx.webServer,
@@ -191,6 +210,8 @@ export class ExternalGatewayService extends Service {
       this.tokenPath = token.path
       this.disposeRoutes = http.register()
       await worker.start()
+      logger.info(`网关就绪 host=${this.ctx.webServer.host} port=${this.ctx.webServer.port} cwd=${startupCwd}`)
+      logger.info(`认证文件路径=${token.path}`)
       this.ctx.effect(() => async () => {
         this.disposeRoutes?.()
         this.disposeRoutes = undefined
@@ -200,6 +221,7 @@ export class ExternalGatewayService extends Service {
         await domain.close()
       }, 'externalGateway')
     } catch (error) {
+      logger.error('网关初始化失败', error)
       await domain.close()
       throw error
     }

@@ -215,6 +215,7 @@ export class ExternalGatewayWorker {
         message: failure.message,
       })
       await this.store.failDelivery(clientId, deliveryId, failure.code, failure.message)
+      this.report(new Error(`投递失败 deliveryId=${deliveryId} code=${failure.code}: ${failure.message}`))
       return
     }
 

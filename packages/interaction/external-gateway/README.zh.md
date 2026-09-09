@@ -55,6 +55,10 @@ HTTP adapter 使用 `raw-body` 有界读取请求流。JSON 请求保留 `body_t
 | `maxUploadBytes` | `100 MiB` | 已完成 file upload 的最大大小。 |
 | `maxImageBytes` | `20 MiB` | 已完成 image upload 的最大大小。 |
 
+控制台诊断默认开启。启动时向 stderr 输出监听地址、cwd 和 token 文件路径；网关拥有的 Session 输出轮次与模型步骤进度、结束原因和模型提供方失败，投递失败也会记录。日志不输出消息正文和工具参数，会屏蔽常见凭据格式与 URL，不打印错误堆栈或任意错误对象。模型提供方的错误文本仍可能含敏感信息，分享日志前应先检查。
+
+`consoleLogs: false` 关闭此控制台输出。`consoleLogMaxChars` 默认为 `2000`，限制每条日志正文的长度。这两个插件配置字段不改变 HTTP 协议或 Session 持久化。
+
 固定在 `127.0.0.1:18765` 的隔离 WebServer 由 bundle 而非此 plugin 配置。Profile 提供固定的启动 cwd。它用于归属检查且不会接受请求体中的 cwd。
 
 <a id="protocol"></a>
