@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-09-external-gateway-http-controllers.md
+2026-09-09-external-gateway-http-controllers.md: 94f8d06812c185e5dd7db1b0ea5bb1f43280e084
+2026-09-09-external-gateway-http-controllers.zh.md: ae859df558a443b7f144aa9cfa61c177e938f594

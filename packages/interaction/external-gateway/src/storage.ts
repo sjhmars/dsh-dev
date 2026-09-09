@@ -7,6 +7,7 @@
  * @module @deepseek-ai/dsh-external-gateway/storage
  */
 
+import type { GatewayDraft } from './construction-types.ts'
 import { createHash, randomUUID } from 'node:crypto'
 import { copyFile, mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
@@ -246,7 +247,10 @@ export function sanitizeGatewayFilename(filename: string): string {
     .replace(/[<>:"/\\|?*\u0000-\u001f\u007f]/gu, '_')
     .trim()
     .replace(/[. ]+$/u, '')
-  let safe = normalized.length === 0 || normalized === '.' || normalized === '..' ? 'upload' : normalized
+  let safe = normalized
+  if (normalized.length === 0 || normalized === '.' || normalized === '..') {
+    safe = 'upload'
+  }
   const stem = safe.split('.')[0]?.toUpperCase() ?? ''
   if (WINDOWS_RESERVED_FILENAMES.has(stem)) safe = `_${safe}`
   let result = ''
@@ -254,7 +258,8 @@ export function sanitizeGatewayFilename(filename: string): string {
     if (Buffer.byteLength(result + character, 'utf8') > MAX_UPLOAD_FILENAME_BYTES) break
     result += character
   }
-  return result.length === 0 ? 'upload' : result
+  if (result.length === 0) return 'upload'
+  return result
 }
 
 function isWithin(root: string, candidate: string): boolean {
@@ -308,7 +313,11 @@ function withoutDeliveryErrors(record: GatewayDeliveryRecord): Omit<GatewayDeliv
 export function canonicalJson(value: JsonValue): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value)
   if (Array.isArray(value)) return `[${value.map(item => canonicalJson(item)).join(',')}]`
-  const entries = Object.entries(value).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+  const entries = Object.entries(value).sort(([left], [right]) => {
+    if (left < right) return -1
+    if (left > right) return 1
+    return 0
+  })
   return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`).join(',')}}`
 }
 
@@ -440,7 +449,8 @@ export class ExternalGatewayStore {
   /** 读取一条投递，用于幂等检查和 worker 恢复。 */
   getDelivery(clientId: GatewayClientIdValue, deliveryId: GatewayDeliveryIdValue): GatewayDeliveryRecord | undefined {
     const found = this.deliveries.get(deliveryKey(clientId, deliveryId))
-    return found === undefined ? undefined : clone(found)
+    if (found === undefined) return undefined
+    return clone(found)
   }
 
   /** 按准入顺序列出全部待处理投递。 */
@@ -480,12 +490,14 @@ export class ExternalGatewayStore {
       if (current.status === 'completed') return clone(current)
       const timestamp = this.now()
       const withoutError = withoutDeliveryErrors(current)
-      const next: GatewayDeliveryRecord = {
+      const next: GatewayDraft<GatewayDeliveryRecord> = {
         ...withoutError,
         status: 'completed',
         updatedAt: timestamp,
         completedAt: timestamp,
-        ...(result === undefined ? {} : { result: clone(result) }),
+      }
+      if (result !== undefined) {
+        next.result = clone(result)
       }
       await this.deliveries.put(key, next)
       return clone(next)
@@ -764,7 +776,7 @@ export class ExternalGatewayStore {
       }
       const timestamp = this.now()
       const directory = join(this.uploadDirectory, randomUUID())
-      const record: GatewayUploadRecord = {
+      const record: GatewayDraft<GatewayUploadRecord> = {
         clientId: GatewayClientId(clientId),
         accountId: request.accountId,
         peerId: request.peerId,
@@ -773,7 +785,6 @@ export class ExternalGatewayStore {
         filename,
         contentType,
         size: request.size,
-        ...(request.sha256 === undefined ? {} : { sha256: request.sha256 }),
         chunkSize: GATEWAY_UPLOAD_CHUNK_BYTES,
         totalParts: Math.ceil(request.size / GATEWAY_UPLOAD_CHUNK_BYTES),
         parts: [],
@@ -781,6 +792,9 @@ export class ExternalGatewayStore {
         status: 'pending',
         createdAt: timestamp,
         updatedAt: timestamp,
+      }
+      if (request.sha256 !== undefined) {
+        record.sha256 = request.sha256
       }
       await mkdir(directory, { recursive: true, mode: 0o700 })
       try {
@@ -796,7 +810,8 @@ export class ExternalGatewayStore {
   /** 按凭据推导出的客户端 ID 读取上传记录。 */
   getUploadForClient(clientId: string, uploadId: string): GatewayUploadRecord | undefined {
     const record = this.uploads.get(uploadKey(clientId, uploadId))
-    return record === undefined ? undefined : clone(record)
+    if (record === undefined) return undefined
+    return clone(record)
   }
 
   /** 仅在已认证 peer 拥有该上传地址时读取上传。 */
@@ -1046,7 +1061,10 @@ export class ExternalGatewayStore {
     if (!Number.isSafeInteger(request.size) || request.size < 0) {
       throw new ExternalGatewayStoreError('upload-invalid', 'upload size must be a non-negative safe integer')
     }
-    const maxBytes = request.kind === 'image' ? this.maxImageBytes : this.maxUploadBytes
+    let maxBytes = this.maxUploadBytes
+    if (request.kind === 'image') {
+      maxBytes = this.maxImageBytes
+    }
     if (request.size > maxBytes) {
       throw new ExternalGatewayStoreError('upload-too-large', 'upload exceeds the maximum size', { maxBytes })
     }
@@ -1079,7 +1097,10 @@ export class ExternalGatewayStore {
   activeSession(peer: ExternalGatewayPeer): SessionId | undefined {
     const record = this.conversations.get(conversationKey(peer.clientId, peer.accountId, peer.peerId))
     if (record?.sessionId === undefined) return undefined
-    return this.ownsSession(peer, record.sessionId) ? record.sessionId : undefined
+    if (this.ownsSession(peer, record.sessionId)) {
+      return record.sessionId
+    }
+    return undefined
   }
 
   /** 持久化 peer 的活动 Session 选择。 */
@@ -1092,12 +1113,14 @@ export class ExternalGatewayStore {
       throw new ExternalGatewayStoreError('session-not-owned', `session '${sessionId}' is not owned by this peer`)
     }
     const key = conversationKey(peer.clientId, peer.accountId, peer.peerId)
-    const next: GatewayConversationRecord = {
+    const next: GatewayDraft<GatewayConversationRecord> = {
       clientId: GatewayClientId(peer.clientId),
       accountId: peer.accountId,
       peerId: peer.peerId,
-      ...(sessionId === undefined ? {} : { sessionId }),
       updatedAt: this.now(),
+    }
+    if (sessionId !== undefined) {
+      next.sessionId = sessionId
     }
     await this.conversations.put(key, next)
     for (const [sessionKeyValue, record] of this.sessions.entries()) {
@@ -1125,7 +1148,8 @@ export class ExternalGatewayStore {
   /** 读取单个交互，不暴露其他客户端的记录。 */
   getInteraction(clientId: GatewayClientIdValue, interactionId: GatewayInteractionIdValue): GatewayInteractionRecord | undefined {
     const record = this.interactions.get(interactionKey(clientId, interactionId))
-    return record === undefined ? undefined : clone(record)
+    if (record === undefined) return undefined
+    return clone(record)
   }
 
   /** 检查交互的 peer、Session 归属及待决有效期。 */
@@ -1189,16 +1213,20 @@ export class ExternalGatewayStore {
         }
       }
       const sequence = maxStoredSequence + 1
-      const event: GatewayEvent = {
+      const event: GatewayDraft<GatewayEvent> = {
         clientId,
         sequence,
         eventId: GatewayEventId(randomUUID()),
         accountId: address.accountId,
         peerId: address.peerId,
-        ...(options.sessionId === undefined ? {} : { sessionId: options.sessionId }),
-        ...(options.causedByDeliveryId === undefined ? {} : { causedByDeliveryId: options.causedByDeliveryId }),
         payload,
         createdAt: this.now(),
+      }
+      if (options.sessionId !== undefined) {
+        event.sessionId = options.sessionId
+      }
+      if (options.causedByDeliveryId !== undefined) {
+        event.causedByDeliveryId = options.causedByDeliveryId
       }
       // 推进序号状态前先写入事件；崩溃可能留下
       // 无害的重复序号候选，但绝不会仅推进状态而留下事件缺口。
@@ -1338,10 +1366,13 @@ export class ExternalGatewayStore {
   /** 单个客户端当前未确认的事件数量。 */
   countOutstanding(clientId: GatewayClientIdValue): number {
     const acknowledged = this.clients.get(clientKey(clientId))?.acknowledgedSequence ?? 0
-    return [...this.outbox.entries()].reduce(
-      (count, [, event]) => count + (event.clientId === clientId && event.sequence > acknowledged ? 1 : 0),
-      0,
-    )
+    let count = 0
+    for (const [, event] of this.outbox.entries()) {
+      if (event.clientId === clientId && event.sequence > acknowledged) {
+        count += 1
+      }
+    }
+    return count
   }
 
   private async deleteAcknowledged(clientId: GatewayClientIdValue, upToSequence: number): Promise<number> {
@@ -1373,13 +1404,16 @@ export class ExternalGatewayStore {
 
 /** 将持久化投递记录转换回 worker 的调度输入。 */
 export function dispatchRequestOf(record: GatewayDeliveryRecord, cwd: string): ExternalGatewayDispatchRequest {
-  return {
+  const request: GatewayDraft<ExternalGatewayDispatchRequest> = {
     clientId: record.clientId,
     accountId: record.accountId,
     peerId: record.peerId,
     deliveryId: record.deliveryId,
     payload: clone(record.payload),
-    ...(record.reservedSessionId === undefined ? {} : { reservedSessionId: record.reservedSessionId }),
     cwd,
   }
+  if (record.reservedSessionId !== undefined) {
+    request.reservedSessionId = record.reservedSessionId
+  }
+  return request
 }

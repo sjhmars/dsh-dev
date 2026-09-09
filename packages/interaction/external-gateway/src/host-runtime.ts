@@ -1,5 +1,6 @@
 /** External Gateway 协议的宿主服务适配器。 */
 
+import type { GatewayDraft } from './construction-types.ts'
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
@@ -24,6 +25,8 @@ import type {
   ExternalGatewayRuntime,
   ExternalGatewayRuntimeEvent,
   GatewayMessageContent,
+  GatewayQuestion,
+  GatewayEventPayload,
   JsonValue,
 } from './types.ts'
 import { ExternalGatewayStore, ExternalGatewayStoreError } from './storage.ts'
@@ -84,23 +87,30 @@ async function promptContent(
           if (mediaType === undefined) {
             throw new ExternalGatewayHostRuntimeError('invalid-content', 'uploaded image content type is not supported')
           }
+          let name = upload.record.filename
+          if (part.name !== undefined) {
+            name = part.name
+          }
           result.push({
             type: 'image',
             mediaType,
             data: Buffer.from(upload.bytes).toString('base64'),
-            ...(part.name === undefined ? { name: upload.record.filename } : { name: part.name }),
+            name,
           })
           break
         }
         if (part.data === undefined || part.mediaType === undefined) {
           throw new ExternalGatewayHostRuntimeError('invalid-content', 'inline image content is incomplete')
         }
-        result.push({
+        const image: GatewayDraft<Extract<PromptContentPart, { type: 'image' }>> = {
           type: 'image',
           mediaType: part.mediaType,
           data: part.data,
-          ...(part.name === undefined ? {} : { name: part.name }),
-        })
+        }
+        if (part.name !== undefined) {
+          image.name = part.name
+        }
+        result.push(image)
         break
       case 'upload': {
         const upload = await store.readUpload(peer, part.uploadId)
@@ -173,7 +183,8 @@ function finalAssistantText(session: Session, turn: number): string | undefined 
     .filter(block => block.type === 'text')
     .map(block => block.text)
     .join('')
-  return text.length === 0 ? undefined : text
+  if (text.length === 0) return undefined
+  return text
 }
 
 /** 对接 `dsh-web-app` 已挂载宿主服务的实际适配器。 */
@@ -255,10 +266,11 @@ export class ExternalGatewayHostRuntime implements ExternalGatewayRuntime {
       case 'session-rename':
         return { sessionId: payload.sessionId, result: json(await this.sessions.rename(peer, payload)) }
       case 'session-fork': {
-        const forked = await this.sessions.fork(peer, {
-          sessionId: payload.sessionId,
-          ...(payload.eventSeq === undefined ? {} : { atSeq: payload.eventSeq }),
-        })
+        const forkRequest: { sessionId: SessionId; atSeq?: number } = { sessionId: payload.sessionId }
+        if (payload.eventSeq !== undefined) {
+          forkRequest.atSeq = payload.eventSeq
+        }
+        const forked = await this.sessions.fork(peer, forkRequest)
         return { sessionId: forked.sessionId }
       }
       case 'session-cancel': {
@@ -293,11 +305,16 @@ export class ExternalGatewayHostRuntime implements ExternalGatewayRuntime {
       case 'command': {
         const sessionId = payload.sessionId ?? request.reservedSessionId
         if (sessionId !== undefined) await this.createPendingSession(peer, sessionId)
-        const result = await this.sessions.command(peer, {
-          ...(sessionId === undefined ? {} : { sessionId }),
-          line: payload.command,
-        }, signal)
-        return { ...(sessionId === undefined ? {} : { sessionId }), result: json(result ?? null) }
+        const commandRequest: { line: string; sessionId?: SessionId } = { line: payload.command }
+        if (sessionId !== undefined) {
+          commandRequest.sessionId = sessionId
+        }
+        const result = await this.sessions.command(peer, commandRequest, signal)
+        const response: GatewayDraft<ExternalGatewayDispatchResult> = { result: json(result ?? null) }
+        if (sessionId !== undefined) {
+          response.sessionId = sessionId
+        }
+        return response
       }
       case 'subagent-followup':
         return {
@@ -324,11 +341,18 @@ export class ExternalGatewayHostRuntime implements ExternalGatewayRuntime {
         }
         this.questions.delete(payload.interactionId)
         await this.store.finishInteraction(request.clientId, payload.interactionId, 'answered')
-        pending.resolve({ answers: payload.answers.map(answer => ({
-          id: answer.id,
-          selected: [...answer.selected],
-          ...(answer.custom === undefined ? {} : { custom: answer.custom }),
-        })) })
+        const answers: AskUserQuestionAnswer['answers'][number][] = []
+        for (const answer of payload.answers) {
+          const entry: GatewayDraft<AskUserQuestionAnswer['answers'][number]> = {
+            id: answer.id,
+            selected: [...answer.selected],
+          }
+          if (answer.custom !== undefined) {
+            entry.custom = answer.custom
+          }
+          answers.push(entry)
+        }
+        pending.resolve({ answers })
         return { sessionId: pending.sessionId }
       }
       case 'approval-answer': {
@@ -394,12 +418,18 @@ export class ExternalGatewayHostRuntime implements ExternalGatewayRuntime {
       case 'history': {
         const observed = await this.ctx.sessionController.inspect(sessionId, signal)
         const throughSeq = observed.events.at(-1)?.seq ?? 0
-        return { kind: 'json', value: json(await this.ctx.sessionController.page({
+        const pageRequest: GatewayDraft<Parameters<typeof this.ctx.sessionController.page>[0]> = {
           address: { kind: 'session', sessionId },
           throughSeq,
-          ...(request.cursor === undefined ? {} : { beforeSeq: Number(request.cursor) }),
-          ...(request.limit === undefined ? {} : { maxMessages: request.limit }),
-        }, signal)) }
+        }
+        if (request.cursor !== undefined) {
+          pageRequest.beforeSeq = Number(request.cursor)
+        }
+        if (request.limit !== undefined) {
+          pageRequest.maxMessages = request.limit
+        }
+        const page = await this.ctx.sessionController.page(pageRequest, signal)
+        return { kind: 'json', value: json(page) }
       }
       default:
         throw new ExternalGatewayHostRuntimeError('unsupported-query', 'unsupported query operation')
@@ -462,7 +492,11 @@ export class ExternalGatewayHostRuntime implements ExternalGatewayRuntime {
     }
     const last = events.length - 1
     for (const [index, projected] of events.entries()) {
-      await this.publish(index === last ? { ...projected, sourceSequence: event.seq } : projected)
+      if (index === last) {
+        await this.publish({ ...projected, sourceSequence: event.seq })
+      } else {
+        await this.publish(projected)
+      }
     }
   }
 
@@ -479,6 +513,26 @@ export class ExternalGatewayHostRuntime implements ExternalGatewayRuntime {
     const answer = new Promise<AskUserQuestionAnswer>((resolve, reject) => {
       this.questions.set(interactionId, { peer, sessionId: agent.session.id, resolve, reject })
     })
+    const questions: GatewayQuestion[] = []
+    for (const question of request.questions) {
+      const entry: GatewayDraft<GatewayQuestion> = { id: question.id, question: question.question }
+      if (question.detail !== undefined) {
+        entry.detail = question.detail
+      }
+      if (question.header !== undefined) {
+        entry.header = question.header
+      }
+      if (question.options !== undefined) {
+        entry.options = question.options
+      }
+      if (question.multiSelect !== undefined) {
+        entry.multiSelect = question.multiSelect
+      }
+      if (question.intent !== undefined) {
+        entry.intent = question.intent
+      }
+      questions.push(entry)
+    }
     await this.publish({
       ...this.eventPeer(peer),
       sessionId: agent.session.id,
@@ -494,15 +548,7 @@ export class ExternalGatewayHostRuntime implements ExternalGatewayRuntime {
         sessionId: agent.session.id,
         interactionId,
         expiresAt,
-        questions: request.questions.map(question => ({
-          id: question.id,
-          question: question.question,
-          ...(question.detail === undefined ? {} : { detail: question.detail }),
-          ...(question.header === undefined ? {} : { header: question.header }),
-          ...(question.options === undefined ? {} : { options: question.options }),
-          ...(question.multiSelect === undefined ? {} : { multiSelect: question.multiSelect }),
-          ...(question.intent === undefined ? {} : { intent: question.intent }),
-        })),
+        questions,
       },
     })
     return this.withQuestionLifetime(interactionId, agent.session.id, peer, answer, request.signal, expiresAt)
@@ -520,6 +566,16 @@ export class ExternalGatewayHostRuntime implements ExternalGatewayRuntime {
     const answer = new Promise<ApprovalOutcome>(resolve => {
       this.approvals.set(interactionId, { peer, sessionId: request.agent.session.id, resolve })
     })
+    const payload: GatewayDraft<Extract<GatewayEventPayload, { type: 'approval' }>> = {
+      type: 'approval',
+      sessionId: request.agent.session.id,
+      interactionId,
+      expiresAt,
+      toolName: request.toolName,
+    }
+    if (request.reason !== undefined) {
+      payload.reason = request.reason
+    }
     await this.publish({
       ...this.eventPeer(peer),
       sessionId: request.agent.session.id,
@@ -530,14 +586,7 @@ export class ExternalGatewayHostRuntime implements ExternalGatewayRuntime {
         kind: 'approval',
         expiresAt,
       },
-      payload: {
-        type: 'approval',
-        sessionId: request.agent.session.id,
-        interactionId,
-        expiresAt,
-        toolName: request.toolName,
-        ...(request.reason === undefined ? {} : { reason: request.reason }),
-      },
+      payload,
     })
     return this.withApprovalLifetime(interactionId, request.agent.session.id, peer, answer, request.signal, expiresAt)
   }

@@ -9,6 +9,7 @@
  * @module @deepseek-ai/dsh-external-gateway/session-runtime
  */
 
+import type { GatewayDraft } from './construction-types.ts'
 import { randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -28,6 +29,7 @@ import type {
   SessionController,
   SessionSkillCatalog,
   SessionCreateValue,
+  SessionCreateRequest,
   SessionForkValue,
   SessionPromptRequest,
   SessionPromptValue,
@@ -343,11 +345,14 @@ export class GatewaySessionRuntime {
         )
       }
     }
-    const result = await this.services.sessionController.create({
+    const createRequest: GatewayDraft<SessionCreateRequest> = {
       sessionId,
       cwd: this.fixedCwd,
-      ...(request.agentPreset === undefined ? {} : { agentPreset: request.agentPreset }),
-    })
+    }
+    if (request.agentPreset !== undefined) {
+      createRequest.agentPreset = request.agentPreset
+    }
+    const result = await this.services.sessionController.create(createRequest)
     await this.assertLocation(peer, sessionId)
     await this.ownership.setActiveSession(peer, sessionId)
     return result
@@ -451,12 +456,14 @@ export class GatewaySessionRuntime {
     signal: AbortSignal,
   ): Promise<SessionPromptValue> {
     const sessionId = await this.targetSession(peer, request.sessionId)
-    const prompt: SessionPromptRequest = {
+    const prompt: GatewayDraft<SessionPromptRequest> = {
       requestId: request.requestId,
       sessionId,
       mode: request.mode ?? 'queue',
       content: [...request.content],
-      ...(request.clientTimeZone === undefined ? {} : { clientTimeZone: request.clientTimeZone }),
+    }
+    if (request.clientTimeZone !== undefined) {
+      prompt.clientTimeZone = request.clientTimeZone
     }
     return this.services.sessionController.prompt(prompt, signal)
   }
@@ -536,13 +543,15 @@ export class GatewaySessionRuntime {
   ): Promise<SubagentPromptReceipt> {
     await this.assertOwnedLocation(peer, request.parentSessionId)
     await this.assertOwnedSubagent(peer, request.parentSessionId, request.childSessionId)
-    const childRequest: SubagentPromptRequest = {
+    const childRequest: GatewayDraft<SubagentPromptRequest> = {
       requestId: request.requestId,
       parentSessionId: request.parentSessionId,
       childSessionId: request.childSessionId,
       mode: 'continuable',
       content: [...request.content],
-      ...(request.clientTimeZone === undefined ? {} : { clientTimeZone: request.clientTimeZone }),
+    }
+    if (request.clientTimeZone !== undefined) {
+      childRequest.clientTimeZone = request.clientTimeZone
     }
     return this.services.subagents.prompt(childRequest, signal)
   }

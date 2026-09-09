@@ -20,6 +20,7 @@ The package owns protocol validation, bearer-token authentication, peer-scoped S
 - [Protocol](#protocol)
 - [Persistence and delivery](#persistence-and-delivery)
 - [Security invariants](#security-invariants)
+- [Understand the implementation](#understand-the-implementation)
 - [Known limitations and deferred work](#known-limitations-and-deferred-work)
 - [Dev Note](#dev-note)
 
@@ -31,6 +32,8 @@ The package owns protocol validation, bearer-token authentication, peer-scoped S
 Compose the package in a Host-only profile. Open `externalGatewayDomainSpec` through `ctx.storageDomain`, construct an `ExternalGatewayStore`, create the Session runtime adapter, and pass both to `ExternalGatewayWorker` and `ExternalGatewayHttp`. The application bundle owns this composition; the package itself does not start a Node server or add a package bin.
 
 The HTTP carrier only needs the `register(route)` method provided by the isolated Host WebServer realm. Registering the gateway routes on the browser WebServer would violate the profile's transport isolation invariant.
+
+The HTTP adapter uses `raw-body` for bounded request-stream reads. JSON requests retain `body_too_large` and `invalid_json` errors; binary upload parts retain `upload_part_too_large`. Only upload completion accepts an empty JSON body. Limits apply to received bytes even without `Content-Length`.
 
 The protocol authority is [PROTOCOL.md](PROTOCOL.md). Clients must use the same delivery and event rules rather than reading the Host's internal controllers or browser Remote API.
 
@@ -88,6 +91,18 @@ Allowlisted Session events are copied into the outbox with a durable per-Session
 The generated bearer token is stored in an owner-only file and is stable across restarts. The token is not placed in a URL, cookie, profile file, request body, or environment variable. Cross-machine use still requires encrypted FRP, SSH, WireGuard, or TLS transport.
 
 Gateway Sessions are ungrouped and use the profile startup cwd. The protocol has no `cwd`, `workspaceId`, credentials, global settings, plugin, dynamic Cordis, or Agent-preset mutation operation. Session, interaction, and subagent identifiers are checked against the authenticated peer before Host access.
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>HTTP controllers and business services</summary>
+
+[http.ts](src/http.ts) owns route registration and disposal; [routes.ts](src/http/routes.ts) binds each endpoint to its parser and controller. The [protocol DTOs](src/protocol/types.ts), [request parsers](src/protocol/requests.ts), and [response projections](src/protocol/responses.ts) define the exchanged data. [Controllers](src/controllers/) accept validated DTOs and return typed results without Node request objects, URL parsing, or JSON encoding. The [HTTP transport](src/http/transport.ts) owns authentication, cancellation, and response encoding.
+
+[worker.ts](src/worker.ts) owns reliable mutation scheduling, [host-runtime.ts](src/host-runtime.ts) adapts existing DSH services, and [storage.ts](src/storage.ts) owns durable gateway records. Controllers call these existing owners; they do not wrap Agent execution or HTTP request lifetimes in database transactions.
+
+</details>
 
 <a id="known-limitations-and-deferred-work"></a>
 ## Known limitations and deferred work

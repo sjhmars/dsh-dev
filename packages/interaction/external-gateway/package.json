@@ -76,6 +76,7 @@
     "@deepseek-ai/dsh-atomic-write": "workspace:^",
     "@deepseek-ai/dsh-home-paths": "workspace:^",
     "@deepseek-ai/schemastery": "workspace:^",
+    "raw-body": "^3.0.2",
     "zod": "^4.4.3"
   },
   "devDependencies": {

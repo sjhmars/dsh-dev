@@ -20,6 +20,7 @@ kind: "package-reference"
 - [协议](#protocol)
 - [持久化与投递](#persistence-and-delivery)
 - [安全不变量](#security-invariants)
+- [理解实现](#understand-the-implementation)
 - [已知限制与延期工作](#known-limitations-and-deferred-work)
 - [开发备注](#dev-note)
 
@@ -31,6 +32,8 @@ kind: "package-reference"
 在仅含 Host 的 profile 中组合本包。通过 `ctx.storageDomain` 打开 `externalGatewayDomainSpec`，构造 `ExternalGatewayStore`，创建 Session runtime adapter，再将二者交给 `ExternalGatewayWorker` 和 `ExternalGatewayHttp`。应用 bundle 负责组合；本包不会启动 Node Server，也不会增加 package bin。
 
 HTTP carrier 只需要隔离 Host WebServer realm 提供的 `register(route)` 方法。把网关路由注册到浏览器 WebServer 会违反 profile 的传输隔离不变量。
+
+HTTP adapter 使用 `raw-body` 有界读取请求流。JSON 请求保留 `body_too_large` 和 `invalid_json` 错误，二进制上传分块保留 `upload_part_too_large`。仅上传完成接口允许空 JSON 正文。即使没有 `Content-Length`，限制仍按实际接收字节数执行。
 
 协议权威文档是 [PROTOCOL.md](PROTOCOL.md)。客户端必须遵循相同的 delivery 和事件规则，不得读取 Host 内部 controller 或浏览器 Remote API。
 
@@ -88,6 +91,18 @@ Allowlist 中的 Session event 会使用持久的逐 Session cursor 复制到 ou
 自动生成的 Bearer Token 保存在 owner-only 文件中，并在重启间保持不变。Token 不会放进 URL、cookie、profile 文件、请求体或环境变量。跨机器使用仍必须通过加密 FRP、SSH、WireGuard 或 TLS 传输。
 
 网关 Session 未分组，并使用 profile 启动 cwd。协议没有 `cwd`、`workspaceId`、credentials、全局 settings、plugin、动态 Cordis 或 Agent preset 修改操作。访问 Host 前会检查 Session、interaction 和 subagent id 是否属于认证 peer。
+
+<a id="understand-the-implementation"></a>
+## 理解实现
+
+<details>
+<summary>HTTP 控制器与业务服务</summary>
+
+[http.ts](src/http.ts) 管理路由注册与释放；[routes.ts](src/http/routes.ts) 将各接口绑定到解析器和控制器。[协议 DTO](src/protocol/types.ts)、[请求解析器](src/protocol/requests.ts) 和[响应投影](src/protocol/responses.ts) 定义交换的数据。[控制器](src/controllers/) 接收已校验 DTO 并返回明确类型的结果，不接触 Node 请求对象、URL 解析或 JSON 编码。[HTTP 传输层](src/http/transport.ts) 负责认证、取消及响应编码。
+
+[worker.ts](src/worker.ts) 负责可靠变更调度，[host-runtime.ts](src/host-runtime.ts) 适配已有 DSH 服务，[storage.ts](src/storage.ts) 管理网关持久化记录。控制器调用这些已有实现，不把 Agent 执行或 HTTP 请求生命周期包进数据库事务。
+
+</details>
 
 <a id="known-limitations-and-deferred-work"></a>
 ## 已知限制与延期工作

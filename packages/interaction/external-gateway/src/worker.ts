@@ -8,6 +8,7 @@
  * @module @deepseek-ai/dsh-external-gateway/worker
  */
 
+import type { GatewayDraft } from './construction-types.ts'
 import type {
   ExternalGatewayDispatchResult,
   ExternalGatewayRuntime,
@@ -75,16 +76,15 @@ function mutationEvent(
     case 'session-select': return { type: 'session-selected', sessionId }
     case 'session-rename': return { type: 'session-updated', sessionId, changes: jsonObject({ title: payload.title }) }
     case 'session-fork': return { type: 'session-created', sessionId }
-    case 'model-select': return {
-      type: 'session-updated',
-      sessionId,
-      changes: jsonObject({
-        model: jsonObject({
-          provider: payload.selection.provider,
-          model: payload.selection.model,
-          ...(payload.selection.reasoningEffort === undefined ? {} : { reasoningEffort: payload.selection.reasoningEffort }),
-        }),
-      }),
+    case 'model-select': {
+      const model: Record<string, JsonValue> = {
+        provider: payload.selection.provider,
+        model: payload.selection.model,
+      }
+      if (payload.selection.reasoningEffort !== undefined) {
+        model.reasoningEffort = payload.selection.reasoningEffort
+      }
+      return { type: 'session-updated', sessionId, changes: jsonObject({ model: jsonObject(model) }) }
     }
     case 'permission-select': return { type: 'session-updated', sessionId, changes: jsonObject({ permissionPreset: payload.preset }) }
     case 'session-cancel': return { type: 'session-updated', sessionId, changes: jsonObject({ cancelled: true }) }
@@ -96,9 +96,9 @@ function mutationEvent(
     case 'subagent-interrupt':
       return undefined
     case 'session-export': {
-      const artifactId = typeof result === 'object' && result !== null && !Array.isArray(result)
-        && typeof result.artifactId === 'string' ? result.artifactId : undefined
-      return artifactId === undefined ? undefined : { type: 'artifact-ready', sessionId, artifactId }
+      if (typeof result !== 'object' || result === null || Array.isArray(result)) return undefined
+      if (typeof result.artifactId !== 'string') return undefined
+      return { type: 'artifact-ready', sessionId, artifactId: result.artifactId }
     }
     default: return undefined
   }
@@ -227,11 +227,14 @@ export class ExternalGatewayWorker {
       // inbox 标记为已完成前，所有事件均已持久化。这些写入
       // 之间发生崩溃可能导致重启后事件重复，但不会
       // 确认一个完成事件已丢失的投递。
-      await this.appendDeliveryEvent(prepared.record, {
+      const completed: GatewayDraft<Extract<GatewayEventPayload, { type: 'delivery-completed' }>> = {
         type: 'delivery-completed',
         deliveryId,
-        ...(result.result === undefined ? {} : { result: result.result as JsonValue }),
-      }, result.sessionId)
+      }
+      if (result.result !== undefined) {
+        completed.result = result.result
+      }
+      await this.appendDeliveryEvent(prepared.record, completed, result.sessionId)
       const changed = mutationEvent(prepared.record.payload, result.sessionId, result.result)
       if (changed !== undefined) await this.appendDeliveryEvent(prepared.record, changed, result.sessionId)
       if (this.stopping || this.abortController.signal.aborted) return
@@ -261,12 +264,16 @@ export class ExternalGatewayWorker {
     payload: GatewayEventPayload,
     sessionId?: ExternalGatewayDispatchResult['sessionId'],
   ): Promise<void> {
-    await this.store.appendEvent(
-      record.clientId,
-      record,
-      payload,
-      { ...(sessionId === undefined ? {} : { sessionId }), causedByDeliveryId: record.deliveryId },
-    )
+    const options: {
+      sessionId?: NonNullable<ExternalGatewayDispatchResult['sessionId']>
+      causedByDeliveryId: GatewayDeliveryRecord['deliveryId']
+    } = {
+      causedByDeliveryId: record.deliveryId,
+    }
+    if (sessionId !== undefined) {
+      options.sessionId = sessionId
+    }
+    await this.store.appendEvent(record.clientId, record, payload, options)
   }
 
   private async persistRuntimeEvent(event: ExternalGatewayRuntimeEvent): Promise<void> {
@@ -293,7 +300,10 @@ export class ExternalGatewayWorker {
         await new Promise<void>(resolve => setTimeout(resolve, Math.min(1000, 25 * 2 ** attempt)))
       }
     }
-    throw lastError instanceof Error ? lastError : new Error(String(lastError))
+    if (lastError instanceof Error) {
+      throw lastError
+    }
+    throw new Error(String(lastError))
   }
 
   private report(error: unknown): void {
