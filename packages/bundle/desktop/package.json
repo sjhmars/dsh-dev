@@ -61,6 +61,6 @@
     "@deepseek-ai/dsh-shell-env": "workspace:^",
     "@deepseek-ai/dsh-system-prompt": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^",
-    "electron": "^37.0.0"
+    "electron": "^43.3.0"
   }
 }
